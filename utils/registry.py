@@ -2,6 +2,7 @@ import inspect
 import warnings
 from functools import partial
 from utils import config
+# from misc import is_seq_of
 
 class Registry:
     """A registry to map strings to classes.

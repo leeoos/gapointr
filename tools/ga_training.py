@@ -1,11 +1,10 @@
-import os 
+import os
 import sys
-import cv2
 import h5py
 import torch
 import logging
-import numpy as np
-import torch.nn as nn
+from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 # Setup base directory and add file to python path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,21 +21,53 @@ from mvp.mvp_dataset import MVPDataset
 from models.GPD import GPD
 
 
-if __name__ == '__main__':
 
-    output_dir = BASE_DIR + "/../inference_result/demonet/"
-    os.makedirs(output_dir, exist_ok=True)
+class GaTrainer():
+
+    def __init__(self, logger) -> None:
+        self.parameters = ...
+        self.logger = logger
+
+    def train(
+            self,
+            backbone,
+            main_model,
+            dataloader
+    ) -> None:
+        
+        backbone_device = next(backbone.parameters()).device
+        main_model_device = next(main_model.parameters()).device
+        assert backbone_device == main_model_device
+        
+        for idx, pcd in enumerate(tqdm(dataloader, total=len(dataloader))):
+
+            partial, complete = pcd
+
+            # Pass partial pcd to PoinTr
+            with torch.no_grad():
+                ret = backbone(partial.to(device))
+
+            raw_output = ret[-1].permute(0, 2, 1)
+            self.logger.info(f"output shape: {raw_output.shape}")
+
+            # Pass trough GPD
+            assert main_model_device == raw_output.device
+            deformed_points = main_model(raw_output) 
+        
+
+
+
+if __name__ == "__main__":
 
     # Setup logging
     os.makedirs(BASE_DIR + "/../logs", exist_ok=True)
     logging.basicConfig(
-        filename=BASE_DIR+"/../logs/demo.log", 
+        filename=BASE_DIR+"/../logs/train.log", 
         encoding="utf-8", 
         level=logging.DEBUG, 
         filemode="w"
     )
     logger = logging.getLogger(__name__)
-
 
     # Setup device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -53,11 +84,12 @@ if __name__ == '__main__':
     print(train_dataset)
     print("done")
 
-    # Temporary get a single sample 
-    points = train_dataset[420][0] # get partial pcd
-    logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
+    # Make dataloader
+    train_dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
     # Build algebra
+    points = train_dataset[42][0] # get partial pcd to build the algebra
+    logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
     algebra_dim = int(points.shape[1])
     metric = [1 for i in range(algebra_dim)]
     print("\nGenerating the algebra...")
@@ -75,71 +107,27 @@ if __name__ == '__main__':
     init_config = BASE_DIR + "/../cfgs/PCN_models/PoinTr.yaml"
     pointr_ckp = BASE_DIR + "/../ckpts/PCN_Pretrained.pth"
     config = cfg_from_yaml_file(init_config, root=BASE_DIR+"/../")
-
-    # Build PoinTr
     pointr = builder.model_builder(config.model)
     builder.load_model(pointr, pointr_ckp)
     pointr.to(device)
-    pointr.eval()
-    print(pointr)
-
-    print("\nPoinTr inference...")
-    input_for_pointr = torch.tensor(points, dtype=torch.float32).unsqueeze(0).to(device)
-    ret = pointr(input_for_pointr)
-    raw_output = ret[-1].permute(1, 2, 0)
-    dense_points = ret[-1].squeeze(0).detach().cpu().numpy()
-    input_img = misc.get_ptcloud_img(points)
-    dense_img = misc.get_ptcloud_img(dense_points)
-    print("done")
-
-    print("Saving output of PoinTr")
-    cv2.imwrite(os.path.join(output_dir, 'input.jpg'), input_img)
-    cv2.imwrite(os.path.join(output_dir, 'fine.jpg'), dense_img)
-    logger.info(f"images saved at: {output_dir}")
-    print("done")
-
 
     # Define custom model
     # model = PointCloudDeformationNet()
     print("\nBuilding the GPD model")
     gpd = GPD(algebra)
-    gpd = gpd.to(device)
+    gpd.to(device)
     param_device = next(gpd.parameters()).device
     logger.info(f"model parameters device: {param_device}") 
     print(gpd.name)
     print(gpd)
-    print("done...", end=" ")
+    print("done")
 
-    # TODO: load checkpoints for GPD
-    print("processing...")
+    trainer = GaTrainer(
+        logger=logger
+    )
 
-    # Deform the point cloud (inference after training)
-    assert param_device == raw_output.device
-    print(raw_output.shape)
-    deformed_points = gpd(raw_output)
-    print(type(deformed_points))
-    print(deformed_points.shape)
-    
-
-    # Save the deformed point cloud
-    print("Saving output of GPD... ")
-    ga_dense_points = deformed_points.detach().cpu().numpy()
-    ga_img = misc.get_ptcloud_img(ga_dense_points)
-    cv2.imwrite(os.path.join(output_dir, 'ga_fine.jpg'), ga_img)
-    logger.info(f"output destination: {output_dir}")
-
-    
-    # output_pcd = "deformed_output.pcd"
-    # logger.info(f"saving destination: {output_pcd}")
-    # save_deformed_point_cloud(deformed_points.cpu().detach().numpy(), output_pcd)
-    # points = load_point_cloud(output_pcd)
-    # print("done")
-
-    # # Convert point cloud to image
-    # print("Generating final image")
-    # point_cloud_to_image_with_color(points, img_size=(256, 256), output_file="ga_fine.png")
-
-    print("done!")
-    
-
-
+    trainer.train(
+        backbone=pointr,
+        main_model=gpd,
+        dataloader=train_dataloader
+    )
