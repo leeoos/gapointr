@@ -77,7 +77,10 @@ def inference_single(model, pc_path, args, config, root=None):
     
     pc_ndarray_normalized = transform({'input': pc_ndarray})
     # inference
+    # print(type(pc_ndarray_normalized['input'].unsqueeze(0).to(args.device.lower())))
+    # print(pc_ndarray_normalized['input'].unsqueeze(0).to(args.device.lower()).shape)
     ret = model(pc_ndarray_normalized['input'].unsqueeze(0).to(args.device.lower()))
+    print(type(ret[-1]))
     dense_points = ret[-1].squeeze(0).detach().cpu().numpy()
 
     if config.dataset.train._base_['NAME'] == 'ShapeNet':
