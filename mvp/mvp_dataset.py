@@ -1,6 +1,7 @@
-from torch.utils.data import Dataset
-from traitlets import Any
+import math
 import random 
+from traitlets import Any
+from torch.utils.data import Dataset
 
 random.seed(346)
 
@@ -25,7 +26,9 @@ class MVPDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
 
-        target_index = index % self.mv # crop the index for the complete pcd
+        target_index = math.floor(index / self.mv) # crop the index for the complete pcd
+        # print(index)
+        # print(target_index)
 
         partial = self.dataset['incomplete_pcds'][index]
         complete = self.dataset['complete_pcds'][target_index]

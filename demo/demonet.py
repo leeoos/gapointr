@@ -19,7 +19,10 @@ from utils.config import cfg_from_yaml_file
 # MVP Clifford Algebra, Model, Dataset  
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 from mvp.mvp_dataset import MVPDataset
-from models.GPD import GPD
+from models.GPD import (
+    GPD,
+    InvariantCGENN
+)
 
 
 if __name__ == '__main__':
@@ -48,17 +51,24 @@ if __name__ == '__main__':
     train_data_path = data_path + "MVP_Train_CP.h5"
     logger.info(f"data directory: {data_path}")
     load_train_dataset = h5py.File(train_data_path, 'r')
-    train_dataset = MVPDataset(load_train_dataset, logger=logger)
+    train_dataset = MVPDataset(load_train_dataset, logger=logger, mv=26)
     logger.info(f"lenght of train dataset: {len(train_dataset)}")
     print(train_dataset)
     print("done")
 
     # Temporary get a single sample 
-    points = train_dataset[420][0] # get partial pcd
-    logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
+    pcd_index = 20
+    partial, complete = train_dataset[pcd_index]
+    input_img = misc.get_ptcloud_img(partial)
+    complete_img = misc.get_ptcloud_img(complete)
+    cv2.imwrite(os.path.join(output_dir, 'partial.jpg'), input_img)
+    cv2.imwrite(os.path.join(output_dir, 'complete.jpg'), complete_img)
+    logger.info(f"shape of a single partial pointcloud: {partial[0].shape}")
+
+    # exit()
 
     # Build algebra
-    algebra_dim = int(points.shape[1])
+    algebra_dim = int(partial.shape[1])
     metric = [1 for i in range(algebra_dim)]
     print("\nGenerating the algebra...")
     algebra = CliffordAlgebra(metric)
@@ -84,16 +94,15 @@ if __name__ == '__main__':
     print(pointr)
 
     print("\nPoinTr inference...")
-    input_for_pointr = torch.tensor(points, dtype=torch.float32).unsqueeze(0).to(device)
+    input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
-    raw_output = ret[-1].permute(1, 2, 0)
+    raw_output = ret[-1] #.permute(1, 2, 0)
     dense_points = ret[-1].squeeze(0).detach().cpu().numpy()
-    input_img = misc.get_ptcloud_img(points)
     dense_img = misc.get_ptcloud_img(dense_points)
     print("done")
 
     print("Saving output of PoinTr")
-    cv2.imwrite(os.path.join(output_dir, 'input.jpg'), input_img)
+
     cv2.imwrite(os.path.join(output_dir, 'fine.jpg'), dense_img)
     logger.info(f"images saved at: {output_dir}")
     print("done")
@@ -103,6 +112,13 @@ if __name__ == '__main__':
     # model = PointCloudDeformationNet()
     print("\nBuilding the GPD model")
     gpd = GPD(algebra)
+    gpd = InvariantCGENN(
+        algebra=algebra,
+        in_features=raw_output.shape[1], # Note: this number should be fixed to 16384 (if not consider upsampling/ downlasmpling???)
+        hidden_features=64,
+        out_features=3,
+        restore_dim=16384
+    )
     gpd = gpd.to(device)
     param_device = next(gpd.parameters()).device
     logger.info(f"model parameters device: {param_device}") 
@@ -115,29 +131,21 @@ if __name__ == '__main__':
 
     # Deform the point cloud (inference after training)
     assert param_device == raw_output.device
-    print(raw_output.shape)
-    deformed_points = gpd(raw_output)
-    print(type(deformed_points))
-    print(deformed_points.shape)
+    # print(raw_output.shape)
+    # Convert input to Multivector
+    gpd_input = algebra.embed_grade(raw_output, 1)
+    deformed_points = gpd(gpd_input)
+    print(f"deformed points shape: {deformed_points.shape}")
+    # exit()
     
 
     # Save the deformed point cloud
-    print("Saving output of GPD... ")
-    ga_dense_points = deformed_points.detach().cpu().numpy()
+    print("\nSaving output of GPD... ")
+    ga_dense_points = deformed_points.squeeze(0).detach().cpu().numpy()
     ga_img = misc.get_ptcloud_img(ga_dense_points)
     cv2.imwrite(os.path.join(output_dir, 'ga_fine.jpg'), ga_img)
     logger.info(f"output destination: {output_dir}")
 
-    
-    # output_pcd = "deformed_output.pcd"
-    # logger.info(f"saving destination: {output_pcd}")
-    # save_deformed_point_cloud(deformed_points.cpu().detach().numpy(), output_pcd)
-    # points = load_point_cloud(output_pcd)
-    # print("done")
-
-    # # Convert point cloud to image
-    # print("Generating final image")
-    # point_cloud_to_image_with_color(points, img_size=(256, 256), output_file="ga_fine.png")
 
     print("done!")
     
