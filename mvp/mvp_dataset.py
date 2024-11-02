@@ -22,7 +22,7 @@ class MVPDataset(Dataset):
         should match the number of complete one"""
 
     def __len__(self) -> int:
-        return len(self.dataset['complete_pcds'])
+        return len(self.dataset['incomplete_pcds'])
 
     def __getitem__(self, index) -> Any:
 

@@ -140,7 +140,7 @@ def load_model(base_model, ckpt_path, logger = None):
     print_log(f'Loading weights from {ckpt_path}...', logger = logger )
 
     # load state dict
-    state_dict = torch.load(ckpt_path, map_location='cpu')
+    state_dict = torch.load(ckpt_path, map_location='cpu', weights_only=True)
     # parameter resume of base model
     if state_dict.get('model') is not None:
         base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['model'].items()}
