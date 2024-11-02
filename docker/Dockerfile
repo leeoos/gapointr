@@ -78,13 +78,13 @@ RUN apt-get update && apt-get install -y \
 # Set Python3 as the default python command
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
-# Install PyTorch with CUDA 11.8 support
+# Install PyTorch with CUDA support
 RUN pip3 install --upgrade pip
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# Install PyTorch Geometric and dependencies for CUDA 11.8
-RUN pip3 install torch_geometric
-RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.1+cu121.html
+# Install PyTorch Geometric and dependencies for CUDA 
+# RUN pip3 install torch_geometric
+# RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.1+cu121.html
 
 # Set the working directory to /PoinTr
 WORKDIR /PoinTr
