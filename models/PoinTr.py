@@ -118,6 +118,7 @@ class PoinTr(nn.Module):
         coarse_point_cloud = torch.cat([coarse_point_cloud, inp_sparse], dim=1).contiguous()
         rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()
 
-        ret = (coarse_point_cloud, rebuild_points)
+        # Note: now pointr can return also relative coordinates
+        ret = (coarse_point_cloud, rebuild_points, relative_xyz)
         return ret
 
