@@ -18,3 +18,13 @@ git ls-tree -r -l HEAD | sort -k 4 -n -r | head -n 20
 - clean models
 - clean KITTI_metric.py
 - clean utils
+
+
+```
+@inproceedings{yu2021pointr,
+  title={PoinTr: Diverse Point Cloud Completion with Geometry-Aware Transformers},
+  author={Yu, Xumin and Rao, Yongming and Wang, Ziyi and Liu, Zuyan and Lu, Jiwen and Zhou, Jie},
+  booktitle={ICCV},
+  year={2021}
+}
+```

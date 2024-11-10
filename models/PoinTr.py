@@ -93,6 +93,13 @@ class PoinTr(nn.Module):
     
         B, M ,C = q.shape
 
+        # Collect parameters
+        pointr_parameters = {
+            'coarse_point_cloud': coarse_point_cloud,
+            'xyz': xyz,
+            'BMC': (B, M ,C)
+        }
+
         global_feature = self.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
         global_feature = torch.max(global_feature, dim=1)[0] # B 1024
 
@@ -118,7 +125,9 @@ class PoinTr(nn.Module):
         coarse_point_cloud = torch.cat([coarse_point_cloud, inp_sparse], dim=1).contiguous()
         rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()
 
-        # Note: now pointr can return also relative coordinates
-        ret = (coarse_point_cloud, rebuild_points, relative_xyz)
+        # Update parameters
+        pointr_parameters['rebuild_feature'] = rebuild_feature
+        
+        ret = (coarse_point_cloud, rebuild_points, pointr_parameters)
         return ret
 

@@ -19,11 +19,16 @@ from tools import builder
 from utils.config import cfg_from_yaml_file
 from extensions.chamfer_dist import ChamferDistanceL1
 
-# MVP Clifford Algebra, Model, Dataset  
-from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
+# MVP Dataset  
 from mvp.mvp_dataset import MVPDataset
+
+# Clifford Algebra
+from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
+
+# Models
 from models.ga_models.GPD import InvariantCGENN
 from models.ga_models.CGNN import CGNN
+from models.ga_models.GAFold import GAFold
 
 
 class GaTrainer():
@@ -33,11 +38,6 @@ class GaTrainer():
         self.algebra = algebra
         self.logger = logger
 
-    # Chamfer Distance helper function
-    def chamfer_distance(self, point_cloud1, point_cloud2):
-        dist1 = torch.cdist(point_cloud1, point_cloud2, p=2).min(dim=1)[0]
-        dist2 = torch.cdist(point_cloud2, point_cloud1, p=2).min(dim=1)[0]
-        return dist1.mean() + dist2.mean()
 
     def train(
             self,
@@ -65,26 +65,31 @@ class GaTrainer():
                     optimizer.zero_grad()
 
                     # Pass partial pcd to PoinTr
+                    pointr_parameters = {}
                     with torch.no_grad():
-                        output = backbone(partial.to(device))[-1]
+                        pointr_parameters = backbone(partial.to(device))[-1]
 
-                    target = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
+                    # Convert complete pcd to tensor, assuming `complete` does not require gradients and is purely a target for comparison:
+                    target = complete.clone().to(torch.float32).to(device)
+
                     # self.logger.info(f"output shape: {raw_output.shape}")
 
-                    # Pass trough GPD
-                    assert main_model_device == output.device
-                    refined_points = main_model(output) 
+                    # Pass trough GA model
+                    output = main_model(pointr_parameters)
 
-                    loss = self.chamfer_distance(refined_points, target) #loss_fn(refined_points, target)
+                    # print(f"output shape: {output.shape}")
+                    # print(f"tragte shape: {target.shape}")
+
+                    loss = loss_fn(output, target)
                     loss.backward()
                     optimizer.step()
                     epoch_loss += loss.item()
 
                     # free up cuda mem
-                    del partial
                     del complete
+                    del partial
                     del target
-                    del refined_points
+                    del output
                     del loss
                     gc.collect()
                     torch.cuda.empty_cache()
@@ -127,21 +132,21 @@ if __name__ == "__main__":
     print("done")
 
     # Make dataloader
-    train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=8, shuffle=True)
 
     # Build algebra
-    points = train_dataset[42][0] # get partial pcd to build the algebra
-    logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
-    algebra_dim = int(points.shape[1])
-    metric = [1 for i in range(algebra_dim)]
-    print("\nGenerating the algebra...")
-    algebra = CliffordAlgebra(metric)
-    print(f"algebra dimention: \t {algebra.dim}")
-    print(f"multivectors elements: \t {sum(algebra.subspaces)}")
-    print(f"number of subspaces: \t {algebra.n_subspaces}")
-    print(f"subspaces grades: \t {algebra.grades.tolist()}")
-    print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
-    print("done")
+    # points = train_dataset[42][0] # get partial pcd to build the algebra
+    # logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
+    # algebra_dim = int(points.shape[1])
+    # metric = [1 for i in range(algebra_dim)]
+    # print("\nGenerating the algebra...")
+    # algebra = CliffordAlgebra(metric)
+    # print(f"algebra dimention: \t {algebra.dim}")
+    # print(f"multivectors elements: \t {sum(algebra.subspaces)}")
+    # print(f"number of subspaces: \t {algebra.n_subspaces}")
+    # print(f"subspaces grades: \t {algebra.grades.tolist()}")
+    # print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
+    # print("done")
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
@@ -155,27 +160,31 @@ if __name__ == "__main__":
     # Define custom model
     # model = PointCloudDeformationNet()
     print("\nBuilding the Refiner model")
-    cgnn = CGNN(algebra)
-    cgnn = cgnn.to(device)
-    param_device = next(cgnn.parameters()).device
+    model = GAFold(
+        pointr.trans_dim, 
+        step = pointr.fold_step, 
+        hidden_dim = 256
+    )
+    model = model.to(device)
+    param_device = next(model.parameters()).device
     logger.info(f"model parameters device: {param_device}") 
     print("done")
 
     print("\nTraining")
     parameters = {
-        'epochs': 3,
-        'optimizer': optim.AdamW(cgnn.parameters(), lr=0.0001),
-        'loss': torch.nn.MSELoss() #ChamferDistanceL1()
+        'epochs': 200,
+        'optimizer': optim.AdamW(model.parameters(), lr=0.0001),
+        'loss': ChamferDistanceL1()
     }
     trainer = GaTrainer(
         parameters=parameters,
-        algebra=algebra,
+        algebra=None,
         logger=logger
     )
 
     trainer.train(
         backbone=pointr,
-        main_model=cgnn,
+        main_model=model,
         dataloader=train_dataloader
     )
 
@@ -207,12 +216,13 @@ if __name__ == "__main__":
     pointr.eval()
     input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
-    raw_output = ret[-1] #.permute(1, 2, 0)
-    dense_points = ret[-1].squeeze(0).detach().cpu().numpy()
+    raw_output = ret[-1] 
+    dense_points = ret[1].squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
-    cgnn.eval()
-    deformed_points = cgnn(raw_output)
-    ga_dense_points = deformed_points.squeeze(0).detach().cpu().numpy()
+    model.eval()
+    ga_points = model(raw_output)
+    ga_dense_points = ga_points.squeeze(0).detach().cpu().numpy()
     cv2.imwrite(os.path.join(output_dir, 'fine.jpg'), dense_img)
     ga_img = misc.get_ptcloud_img(ga_dense_points)
     cv2.imwrite(os.path.join(output_dir, 'ga_fine.jpg'), ga_img)
+    print("Done!")

@@ -31,7 +31,7 @@ from clifford_modules.mvlinear import MVLinear
 from models.ga_models.CGNN import CGNN
 
 # Models
-from models.GPD import InvariantCGENN
+from models.ga_models.GPD import InvariantCGENN
 
 # Chamfer Distance helper function
 def chamfer_distance(point_cloud1, point_cloud2):
@@ -108,7 +108,6 @@ if __name__ == '__main__':
     input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
     raw_output = ret[1] #.permute(1, 2, 0)
-    print(f"before folding: {ret[2].shape}")
     dense_points = raw_output.squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
 

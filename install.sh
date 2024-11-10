@@ -31,3 +31,9 @@ pip install ./pointnet2_ops_lib
 
 cd $ROOT
 echo $ROOT
+
+# Packeage correction (it may be not necessary when docker is rebuild)
+# pip uninstall pyg-lib torch-sparse
+# pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric --no-cache
+
+echo "Done!"

@@ -20,6 +20,7 @@ RUN pip3 install --upgrade pip
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install PyTorch Geometric and dependencies for CUDA 
+RUN pip3 install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric
 RUN pip3 install torch-cluster -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
 # RUN pip3 install torch_geometric
 # RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.1+cu121.html
