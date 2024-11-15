@@ -2,7 +2,7 @@ import math
 import torch
 from torch import nn
 
-from .mvlinear import MVLinear
+from .MVLinear import MVLinear
 from .normalization import NormalizationLayer
 
 

@@ -3,6 +3,12 @@ from easydict import EasyDict
 import os
 from .logger import print_log
 
+def get_instance(config, available_classes, addictional_params={}):
+    cls = available_classes[config['type']]
+    params = config.get('kwargs', {})
+    return cls(**params, **addictional_params)
+
+
 def log_args_to_file(args, pre='args', logger=None):
     for key, val in args.__dict__.items():
         print_log(f'{pre}.{key} : {val}', logger = logger)

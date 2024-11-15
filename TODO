@@ -1,0 +1,4 @@
+[ ] MVFormer for feature extraction
+[ ] Integrate MVFormer in PoinTr
+[ ] Test Training
+[ ] Combine L1 and L2 chamfer loss

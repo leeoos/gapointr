@@ -69,6 +69,8 @@ class PoinTr(nn.Module):
         self.fold_step = int(pow(self.num_pred//self.num_query, 0.5) + 0.5)
         self.base_model = PCTransformer(in_chans = 3, embed_dim = self.trans_dim, depth = [6, 8], drop_rate = 0., num_query = self.num_query, knn_layer = self.knn_layer)
         
+        print(self.fold_step, self.trans_dim)
+
         self.foldingnet = Fold(self.trans_dim, step = self.fold_step, hidden_dim = 256)  # rebuild a cluster point
 
         self.increase_dim = nn.Sequential(
@@ -97,7 +99,8 @@ class PoinTr(nn.Module):
         pointr_parameters = {
             'coarse_point_cloud': coarse_point_cloud,
             'xyz': xyz,
-            'BMC': (B, M ,C)
+            'BMC': (B, M ,C),
+            'q':q
         }
 
         global_feature = self.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024

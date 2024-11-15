@@ -13,7 +13,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, '../'))
 
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
-from clifford_modules.mvlinear import MVLinear
+from clifford_modules.MVLinear import MVLinear
 from clifford_modules.mvlayernorm import MVLayerNorm
 
 class GeometricAlgebraLayer(nn.Module):

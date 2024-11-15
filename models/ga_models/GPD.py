@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 # Clifford modules
-from clifford_modules.mvlinear import MVLinear
+from clifford_modules.MVLinear import MVLinear
 from clifford_modules.mvrelu import MVReLU
 from clifford_modules.gp import SteerableGeometricProductLayer
 from clifford_modules.mvlayernorm import MVLayerNorm

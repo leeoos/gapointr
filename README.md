@@ -8,16 +8,16 @@ git ls-tree -r -l HEAD | sort -k 4 -n -r | head -n 20
 
 # For ever
 - do not touch extensiions
-- Do not touch tools
+- Do not touch utils 
 
 # For now 
-- Do not touch utils 
+- Do not touch tools
 
 # For later 
 - clean cfg 
 - clean models
-- clean KITTI_metric.py
-- clean utils
+- clean tools
+- delete scripts
 
 
 ```

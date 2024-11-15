@@ -17,15 +17,14 @@ class MVLinear(nn.Module):
     ):
         super().__init__()
         self.algebra = algebra
-        self.in_features = in_features
+        self.in_features = in_features # 
         self.out_features = out_features
         self.subspaces = subspaces
-        # self.subspace_dims = algebra.subspaces.tolist()  
 
         if subspaces:
             self.weight = nn.Parameter(
-                    torch.empty(out_features, in_features, algebra.n_subspaces)
-                )
+                torch.empty(out_features, in_features, algebra.n_subspaces)
+            )
             self._forward = self._forward_subspaces
         else:
             self.weight = nn.Parameter(torch.empty(out_features, in_features))
@@ -51,12 +50,10 @@ class MVLinear(nn.Module):
 
     def _forward_subspaces(self, input):
         weight = self.weight.repeat_interleave(self.algebra.subspaces, dim=-1)
-        print("--------")
-        print(f"4 input: {input.shape}")
-        print(f"self weight: {self.weight.shape}")
-        print(f"weight: {weight.shape}")
+        # print(f"MVLinear input: {input.shape}")
+        # print(f"Weight initialization: {self.weight.shape}")
+        # print(f"Actual weights: {weight.shape}")
         output = torch.einsum("bm...i, nmi->bn...i", input, weight)
-        # print(f"output: {output.shape}")
         return output
 
 

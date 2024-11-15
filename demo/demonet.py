@@ -8,7 +8,6 @@ import logging
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-# from clifford import Cl  # Clifford algebra package
 from torch_geometric.nn import knn_graph
 
 # Setup base directory and add file to python path
@@ -27,11 +26,10 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Modules
-from clifford_modules.mvlinear import MVLinear
-from models.ga_models.CGNN import CGNN
+from clifford_modules.MVLinear import MVLinear
 
 # Models
-from models.ga_models.GPD import InvariantCGENN
+from models.ga_models.GAFold import GAFold
 
 # Chamfer Distance helper function
 def chamfer_distance(point_cloud1, point_cloud2):
@@ -42,7 +40,7 @@ def chamfer_distance(point_cloud1, point_cloud2):
 
 if __name__ == '__main__':
 
-    output_dir = BASE_DIR + "/../inference_result/demonet/"
+    output_dir = BASE_DIR + "/../results/demonet/"
     os.makedirs(output_dir, exist_ok=True)
 
     # Setup logging
@@ -59,10 +57,10 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"device: {device}")
 
-    # Build MVP dataset
+    # Build MVP test dataset
     print("\nBuilding MVP Dataset...")
     data_path = BASE_DIR + "/../mvp/datasets/"
-    train_data_path = data_path + "MVP_Train_CP.h5"
+    train_data_path = data_path + "MVP_Test_CP.h5"
     logger.info(f"data directory: {data_path}")
     load_train_dataset = h5py.File(train_data_path, 'r')
     train_dataset = MVPDataset(load_train_dataset, logger=logger, mv=26)
@@ -72,7 +70,7 @@ if __name__ == '__main__':
     # Temporary get a single sample 
     random.seed(None) # reset seed to get random sample
     pcd_index = random.randint(0, len(train_dataset))
-    print(pcd_index)
+    # print(pcd_index)
     partial, complete = train_dataset[pcd_index]
     input_img = misc.get_ptcloud_img(partial)
     complete_img = misc.get_ptcloud_img(complete)
@@ -104,10 +102,18 @@ if __name__ == '__main__':
     pointr.to(device)
     pointr.eval()
 
+    # PoinTr parametr estimation
+    total_params = sum(p.numel() for p in pointr.parameters())
+    param_size_bytes = total_params * 4  # Assuming float32
+    model_size_mb = param_size_bytes / (1024 ** 2)
+    print(f"Total Parameters: {total_params}")
+    print(f"Model Size: {model_size_mb:.2f} MB")
+
     print("\nPoinTr inference...")
     input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
     raw_output = ret[1] #.permute(1, 2, 0)
+    pointr_parametrs = ret[-1]
     dense_points = raw_output.squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
 
@@ -125,18 +131,27 @@ if __name__ == '__main__':
 
 
     ### TEMPORARY PART ###
-    print("\nClifford Algebra Graph Neural Network...")
-    refinement_net = CGNN(algebra=algebra)
-    refinement_net = refinement_net.to(device)
-    refinement_net.eval()
+    print("\nClifford Algebra Integrated Network...")
+    model = GAFold(
+        algebra=algebra,  
+        embed_dim=8
+    )
+    model = model.to(device)
+    model.load_state_dict(
+        torch.load(
+            os.path.join(BASE_DIR, "../saves/training/model_dict.pt"),
+            weights_only=True
+        )
+    )
+    model.eval()
     torch.cuda.empty_cache()
-    refined_output = refinement_net(raw_output)
-    print(f'Shape of refined output: {refined_output.shape}')
+    output = model(input_for_pointr, pointr, pointr_parametrs)
+    print(f'Shape of refined output: {output.shape}')
     print("done")
 
     # Saving output
-    print("\nSaving output of CGNN... ")
-    new_dense_points = refined_output.squeeze(0).detach().cpu().numpy()
+    print("\nSaving output of GAPoinTr... ")
+    new_dense_points = output.squeeze(0).detach().cpu().numpy()
     new_img = misc.get_ptcloud_img(new_dense_points)
     cv2.imwrite(os.path.join(output_dir, 'new_fine.jpg'), new_img)
     logger.info(f"output destination: {output_dir}")
@@ -146,8 +161,8 @@ if __name__ == '__main__':
     print("\nQuantitative evaluation")
     complete_tensor = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
     print(f"Chamfer distance Partial: {chamfer_distance(ret[0], complete_tensor)}")
-    print(f"Chamfer distance PinTr: {chamfer_distance(raw_output, complete_tensor)}")
-    print(f"Chamfer distance CGNN: {chamfer_distance(refined_output, complete_tensor)}")
+    print(f"Chamfer distance PoinTr: {chamfer_distance(raw_output, complete_tensor)}")
+    print(f"Chamfer distance GAPoinTr: {chamfer_distance(output, complete_tensor)}")
     print("All done!")
 
     # Pointr
@@ -160,15 +175,15 @@ if __name__ == '__main__':
     print(f"Max for PoinTr: {x_max, y_max, z_max}")
     print(f"Min for PoinTr: {x_min, y_min, z_min}")
 
-    # CGNN
-    x_max = torch.max(refined_output[:,:,0]).item()
-    y_max = torch.max(refined_output[:,:,1]).item()
-    z_max = torch.max(refined_output[:,:,2]).item()
-    x_min = torch.min(refined_output[:,:,0]).item()
-    y_min = torch.min(refined_output[:,:,1]).item()
-    z_min = torch.min(refined_output[:,:,2]).item()
-    print(f"Max for CGNN: {x_max, y_max, z_max}")
-    print(f"Min for CGNN: {x_min, y_min, z_min}")
+    # GAPoinTr
+    x_max = torch.max(output[:,:,0]).item()
+    y_max = torch.max(output[:,:,1]).item()
+    z_max = torch.max(output[:,:,2]).item()
+    x_min = torch.min(output[:,:,0]).item()
+    y_min = torch.min(output[:,:,1]).item()
+    z_min = torch.min(output[:,:,2]).item()
+    print(f"Max for GAPoinTr: {x_max, y_max, z_max}")
+    print(f"Min for GAPoinTr: {x_min, y_min, z_min}")
 
 
     # exit()

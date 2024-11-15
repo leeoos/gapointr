@@ -160,3 +160,5 @@ whl/
 ckpts/
 data/
 pointnet2_pytorch/
+logs/
+saves/
