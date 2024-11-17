@@ -230,7 +230,7 @@ def main():
     if config['override_cache']:
         run_counter = config['run_counter']
         run_counter = str(int(run_counter) + 1)
-        save_dir = os.path.join("_", save_dir, run_counter)
+        save_dir = os.path.join(save_dir, "_"+run_counter)
         config['run_counter'] = run_counter
         with open(training_config, "w") as cfile:
             yaml.dump(config, cfile)

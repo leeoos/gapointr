@@ -133,7 +133,7 @@ if __name__ == '__main__':
     ga_checkpoints = os.path.join(
         BASE_DIR, 
         # f"../saves/training/{config_type.lower()}_train_0/model_state_dict.pt"
-        f"../saves/training/pcn_models_train_0/model_state_dict.pt"
+        f"../saves/training/pcn_models_1/model_state_dict.pt"
     )
     print(f"Loading checkpoints from: {ga_checkpoints}")
     model = GAFold(

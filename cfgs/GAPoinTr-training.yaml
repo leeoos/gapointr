@@ -1,31 +1,18 @@
-# PoinTr
-# pointr_config: 'KITTI_models'
-pointr_config: 'PCN_models'
-# pointr_config: 'KITTI_models'
-# pointr_config: 'KITTI_models'
-
-# Model
-embed_dim: 8
-
-# Training
-epochs: 1
 batch_size: 16
-optimizer:
-  kwargs:
-    lr: 0.0001
-    weight_decay: 0.0005
-  type: AdamW
+embed_dim: 8
+epochs: 1
 losses:
   ChDL1:
     type: ChamferDistanceL1
   ChDL2:
     type: ChamferDistanceL2
-
-# Saves
-run_name: 'train'
-save_path: 'saves/training/'
-override_cache: True
-run_counter: '0'
-
-
-
+optimizer:
+  kwargs:
+    lr: 0.0001
+    weight_decay: 0.0005
+  type: AdamW
+override_cache: true
+pointr_config: PCN_models
+run_counter: '1'
+run_name: train
+save_path: saves/training/
