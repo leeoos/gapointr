@@ -24,7 +24,7 @@ losses:
 # Saves
 run_name: 'train'
 save_path: 'saves/training/'
-override_cache: False
+override_cache: True
 run_counter: '0'
 
 

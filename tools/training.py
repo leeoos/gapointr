@@ -227,7 +227,7 @@ def main():
     )
 
     # Saving train output
-    if config['overide_cache']:
+    if config['override_cache']:
         run_counter = config['run_counter']
         run_counter = str(int(run_counter) + 1)
         save_dir = os.path.join("_", save_dir, run_counter)
