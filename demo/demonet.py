@@ -25,18 +25,14 @@ from mvp.mvp_dataset import MVPDataset
 # Clifford Algebra
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
-# Modules
-from clifford_modules.MVLinear import MVLinear
-
 # Models
 from models.ga_models.GAFold import GAFold
 
-# Chamfer Distance helper function
-def chamfer_distance(point_cloud1, point_cloud2):
-    dist1 = torch.cdist(point_cloud1, point_cloud2, p=2).min(dim=1)[0]
-    dist2 = torch.cdist(point_cloud2, point_cloud1, p=2).min(dim=1)[0]
-    return dist1.mean() + dist2.mean()
-
+# Metrics
+from extensions.chamfer_dist import (
+    ChamferDistanceL1, 
+    ChamferDistanceL2
+)
 
 if __name__ == '__main__':
 
@@ -92,13 +88,17 @@ if __name__ == '__main__':
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
-    init_config = BASE_DIR + "/../cfgs/PCN_models/PoinTr.yaml"
-    pointr_ckp = BASE_DIR + "/../ckpts/PCN_Pretrained.pth"
+    # config_type = "KITTI_models"
+    config_type = "PCN_models"
+    # config_type = "ShapeNet34_models"
+    # config_type = "ShapeNet55_models"
+    init_config = BASE_DIR + "/../cfgs/" + config_type + "/PoinTr.yaml"
+    pointr_ckpt = BASE_DIR + "/../ckpts/" + config_type +"/pointr.pth"
     config = cfg_from_yaml_file(init_config, root=BASE_DIR+"/../")
 
     # Build PoinTr
     pointr = builder.model_builder(config.model)
-    builder.load_model(pointr, pointr_ckp)
+    builder.load_model(pointr, pointr_ckpt)
     pointr.to(device)
     pointr.eval()
 
@@ -117,7 +117,6 @@ if __name__ == '__main__':
     dense_points = raw_output.squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
 
-    print(f"Sample: {pcd_index}")
     print(f"input sample shape: {input_for_pointr.shape}")
     print(f"coarse points shape: {ret[0].shape}")
     print(f"dense points shape: {raw_output.shape}")
@@ -129,9 +128,14 @@ if __name__ == '__main__':
     logger.info(f"images saved at: {output_dir}")
     print("done")
 
-
     ### TEMPORARY PART ###
-    print("\nClifford Algebra Integrated Network...")
+    print("\nBuilding GAPoinTr...")
+    ga_checkpoints = os.path.join(
+        BASE_DIR, 
+        # f"../saves/training/{config_type.lower()}_train_0/model_state_dict.pt"
+        f"../saves/training/pcn_models_train_0/model_state_dict.pt"
+    )
+    print(f"Loading checkpoints from: {ga_checkpoints}")
     model = GAFold(
         algebra=algebra,  
         embed_dim=8
@@ -139,12 +143,21 @@ if __name__ == '__main__':
     model = model.to(device)
     model.load_state_dict(
         torch.load(
-            os.path.join(BASE_DIR, "../saves/training/model_dict.pt"),
+            ga_checkpoints,
             weights_only=True
         )
     )
     model.eval()
     torch.cuda.empty_cache()
+
+    # GAPoinTr parametr estimation
+    total_params = sum(p.numel() for p in model.parameters())
+    param_size_bytes = total_params * 4  # Assuming float32
+    model_size_mb = param_size_bytes / (1024 ** 2)
+    print(f"Total Parameters: {total_params}")
+    print(f"Model Size: {model_size_mb:.2f} MB")
+
+    print("\nGAPoinTr inference...")
     output = model(input_for_pointr, pointr, pointr_parametrs)
     print(f'Shape of refined output: {output.shape}')
     print("done")
@@ -159,11 +172,11 @@ if __name__ == '__main__':
 
     # Chamfer Distance helper function
     print("\nQuantitative evaluation")
+    chamfer_dist_l1 = ChamferDistanceL1()
     complete_tensor = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
-    print(f"Chamfer distance Partial: {chamfer_distance(ret[0], complete_tensor)}")
-    print(f"Chamfer distance PoinTr: {chamfer_distance(raw_output, complete_tensor)}")
-    print(f"Chamfer distance GAPoinTr: {chamfer_distance(output, complete_tensor)}")
-    print("All done!")
+    print(f"Chamfer distance Partial: {chamfer_dist_l1(ret[0], complete_tensor)}")
+    print(f"Chamfer distance PoinTr: {chamfer_dist_l1(raw_output, complete_tensor)}")
+    print(f"Chamfer distance GAPoinTr: {chamfer_dist_l1(output, complete_tensor)}")
 
     # Pointr
     x_max = torch.max(raw_output[:,:,0]).item()
@@ -184,12 +197,4 @@ if __name__ == '__main__':
     z_min = torch.min(output[:,:,2]).item()
     print(f"Max for GAPoinTr: {x_max, y_max, z_max}")
     print(f"Min for GAPoinTr: {x_min, y_min, z_min}")
-
-
-    # exit()
-    ####################
-
- 
-    
-
-
+    print("All done!")

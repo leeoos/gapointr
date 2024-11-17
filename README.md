@@ -7,11 +7,10 @@ pointnet2_pytorch --> setup.py --> os.environ["TORCH_CUDA_ARCH_LIST"] = "5.0;6.0
 git ls-tree -r -l HEAD | sort -k 4 -n -r | head -n 20
 
 # For ever
-- do not touch extensiions
+- do not touch extensions
 - Do not touch utils 
-
-# For now 
 - Do not touch tools
+
 
 # For later 
 - clean cfg 

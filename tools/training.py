@@ -35,8 +35,6 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GPD import InvariantCGENN
-from models.ga_models.CGNN import CGNN
 from models.ga_models.GAFold import GAFold
 from models.ga_models.MVFormer import SelfAttentionGA
 
@@ -48,16 +46,13 @@ class Trainer():
         self.algebra = algebra
         self.logger = logger
 
-        # Hardcoded ---> to change
-        # self.attention = SelfAttentionGA(algebra, embed_dim=8).to('cuda')
-
 
     def train(self, backbone, model, dataloader) -> None:
-        
         backbone_device = next(backbone.parameters()).device
         main_model_device = next(model.parameters()).device
         assert backbone_device == main_model_device
 
+        flush_step = 500
         epoch_loss = None
         device = self.parameters['device']
         train_epochs = self.parameters['epochs']
@@ -77,63 +72,69 @@ class Trainer():
         with tqdm(total=train_epochs, leave=True) as pbar:
             for epoch in range(train_epochs):
                 epoch_loss = 0
-                stop_at = 5
-                for batch_idx, pcd in enumerate(dataloader):
+                with tqdm(total=len(dataloader)) as bbar:
+                    for step, pcd in enumerate(dataloader):
 
-                    partial, complete = pcd
-                    optimizer.zero_grad()
+                        partial, complete = pcd
+                        optimizer.zero_grad()
 
-                    # Send point clouds to device
-                    partial = partial.to(device)
-                    complete = complete.to(torch.float32).to(device)
+                        # Send point clouds to device
+                        partial = partial.to(device)
+                        complete = complete.to(torch.float32).to(device)
 
-                    # Pass partial pcd to PoinTr
-                    pointr_parameters = {}
-                    with torch.no_grad():
-                        pointr_parameters = backbone(partial)[-1]
+                        # Pass partial pcd to PoinTr
+                        pointr_parameters = {}
+                        with torch.no_grad():
+                            pointr_parameters = backbone(partial)[-1]
 
-                    # Pass trough GA model
-                    output = model(partial, backbone, pointr_parameters)
+                        # Pass trough GA model
+                        output = model(partial, backbone, pointr_parameters)
 
-                    # print(f"output shape: {output.shape}")
-                    # print(f"tragte shape: {complete.shape}")
+                        loss = loss_fn1(output, complete) + loss_fn2(output, complete)
+                        loss.backward()
+                        optimizer.step()
+                        epoch_loss += loss.item()
 
-                    loss = loss_fn1(output, complete) + loss_fn2(output, complete)
-                    loss.backward()
-                    optimizer.step()
-                    epoch_loss += loss.item()
+                        bbar.set_postfix(
+                            batch_loss= loss.item(), epoch=(epoch/(step + 1))*100
+                        )
+                        bbar.update(1)
 
-                    # free up cuda mem
-                    del complete
-                    del partial
-                    del output
-                    del loss
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    gc.collect()
-
-                    if batch_idx == stop_at:
-                        break
+                        # free up cuda mem
+                        del complete
+                        del partial
+                        del output
+                        del loss
+                        if step > 0 and step % flush_step == 0:
+                            gc.collect()
+                            torch.cuda.empty_cache()
+                            gc.collect()
             
-                epoch_loss = epoch_loss/(batch_idx + 1)
-                pbar.set_postfix(train=epoch_loss)
+                epoch_loss = epoch_loss/(step + 1)
+                pbar.set_postfix(epoch_train=epoch_loss)
                 pbar.update(1)
                 
 def main():
+
+    # Load training configuration file
+    training_config = os.path.join(BASE_DIR, '../cfgs/GAPoinTr-training.yaml')
+    with open(training_config, "r") as file:
+        config = yaml.safe_load(file)
+
+    # Saving path
+    save_dir = os.path.join(
+        BASE_DIR, '..', config['save_path'], config['pointr_config'].lower()
+    )
     
     # Setup logging
-    os.makedirs(BASE_DIR + "/../logs", exist_ok=True)
+    os.makedirs(BASE_DIR + "../logs", exist_ok=True)
     logging.basicConfig(
-        filename=BASE_DIR+"/../logs/train.log", 
+        filename=BASE_DIR + "../logs/train.log", 
         encoding="utf-8", 
         level=logging.DEBUG, 
         filemode="w"
     )
     logger = logging.getLogger(__name__)
-
-    # Set up saving path
-    save_dir = os.path.join(BASE_DIR, "../saves/training/")
-    os.makedirs(save_dir, exist_ok=True)
 
     # Setup device
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -148,10 +149,11 @@ def main():
     train_dataset = MVPDataset(load_train_dataset, logger=logger)
     logger.info(f"lenght of train dataset: {len(train_dataset)}")
     print(train_dataset)
-    print("done")
 
     # Make dataloader
-    train_dataloader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
+    print(f"Number of batches: {len(train_dataloader)}")
+    print("done")
 
     # Build algebra
     points = train_dataset[42][0] # get partial pcd to build the algebra
@@ -169,10 +171,12 @@ def main():
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
-    init_config = BASE_DIR + "/../cfgs/PCN_models/PoinTr.yaml"
-    pointr_ckp = BASE_DIR + "/../ckpts/PCN_Pretrained.pth"
-    config = cfg_from_yaml_file(init_config, root=BASE_DIR+"/../")
-    pointr = builder.model_builder(config.model)
+    pointr_init_config = os.path.join(
+        BASE_DIR, "../cfgs", config['pointr_config'], "PoinTr.yaml"
+    )
+    pointr_ckp = os.path.join(BASE_DIR, "../ckpts", config['pointr_config'], "pointr.pth")
+    pointr_config = cfg_from_yaml_file(pointr_init_config, root=BASE_DIR+"/../")
+    pointr = builder.model_builder(pointr_config.model)
     builder.load_model(pointr, pointr_ckp)
     pointr = pointr.to(device)
 
@@ -180,21 +184,19 @@ def main():
     print("\nBuilding GAPoinTr...")
     model = GAFold(
         algebra=algebra,  
-        embed_dim=8
+        embed_dim=config['embed_dim']
     )
     model = model.to(device)
     param_device = next(model.parameters()).device
     logger.info(f"model parameters device: {param_device}") 
+
+    # GAPoinTr parametr estimation
+    total_params = sum(p.numel() for p in model.parameters())
+    param_size_bytes = total_params * 4  # Assuming float32
+    model_size_mb = param_size_bytes / (1024 ** 2)
+    print(f"Total Parameters: {total_params}")
+    print(f"Model Size: {model_size_mb:.2f} MB")
     print("done")
-
-    # Training
-    print("\nTraining")
-
-    # Load training configuration
-    training_config = os.path.join(BASE_DIR, '../cfgs/GAPoinTr-training.yaml')
-    with open(training_config, "r") as file:
-        config = yaml.safe_load(file)
-    run_couter = config['run']
 
     # Build parameters from yaml
     parameters = {
@@ -211,6 +213,8 @@ def main():
         }
     }
 
+    # Training
+    print("\nTraining")
     trainer = Trainer(
         parameters=parameters,
         algebra=algebra,
@@ -221,25 +225,26 @@ def main():
         model=model,
         dataloader=train_dataloader
     )
-    output_dir = BASE_DIR + "/../inference_result/training/"
-    os.makedirs(output_dir, exist_ok=True)
 
     # Saving train output
-    save_path = os.path.join(save_dir, str(run_couter))
-    os.makedirs(save_path, exist_ok=True)
-    save_path = os.path.join(save_path, "model_state_dict.pt")
-    print(f"\nSaving checkpoints in: {save_path}")
+    if config['overide_cache']:
+        run_counter = config['run_counter']
+        run_counter = str(int(run_counter) + 1)
+        save_dir = os.path.join("_", save_dir, run_counter)
+        config['run_counter'] = run_counter
+        with open(training_config, "w") as cfile:
+            yaml.dump(config, cfile)
+        os.makedirs(save_dir, exist_ok=True)
+
+    else:
+        os.makedirs(save_dir, exist_ok=True)
+
+    save_file = os.path.join(save_dir, "model_state_dict.pt")
+    print(f"\nSaving checkpoints in: {save_dir}")
     torch.save(
         model.state_dict(), 
-        save_path
+        save_file
     )
-    run_couter = str(int(run_couter) + 1)
-    config['run'] = run_couter
-    with open(training_config, "w") as cfile:
-        yaml.dump(config, cfile)
-
-
-
+    
 if __name__ == "__main__":
-
     main()
