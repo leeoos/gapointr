@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,6 +6,8 @@ from pointnet2_ops import pointnet2_utils
 
 # Geometric encoder
 from .MVFormer import SelfAttentionGA
+from .MVFormer import TransformerEncoderGA
+
 
 class Fold(nn.Module):
     def __init__(self, in_channel , step , hidden_dim = 512):
@@ -52,39 +55,52 @@ class Fold(nn.Module):
 
 
 
-class GAFold(nn.Module):
-    def __init__(self, algebra, embed_dim):
+class GAFeatures(nn.Module):
+    def __init__(self, algebra, embed_dim, hidden_dim, pointr):
         super().__init__()
-        self.attention = SelfAttentionGA(algebra, embed_dim=embed_dim)
-        self.foldingnet = Fold(384, step = 8, hidden_dim = 256) 
+        # self.attention = SelfAttentionGA(algebra, embed_dim=embed_dim)
+        self.transformer = TransformerEncoderGA(
+            algebra, 
+            embed_dim, 
+            hidden_dim=128, 
+            num_layers=2
+        )
+        # self.foldingnet = Fold(384, step = 8, hidden_dim = 256) 
+        self.foldingnet = copy.deepcopy(pointr.foldingnet)
+
+        self.project_back = nn.Sequential(
+            nn.Linear(2**algebra.dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 3)
+        )
 
 
-    def forward(self, partial, pointr, pointr_parameters):
+    def forward(self, pointr, pointr_parameters):
 
         # Extract PoinTr parameters:
         coarse_point_cloud = pointr_parameters['coarse_point_cloud']
         x = pointr_parameters['rebuild_feature']
         xyz = pointr_parameters['xyz']
-        B, M ,C = pointr_parameters['BMC']
+        B, M, C = pointr_parameters['BMC']
         q = pointr_parameters['q']
 
         global_feature = pointr.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
-
-        # print(attention_scores.shape)
         
         ### EXPERIMENTAL PART ###
-        attention_scores = self.attention(partial)
-        attention_scores = attention_scores.view(B, 224, 1024)
-        global_feature = torch.cat((global_feature, attention_scores), dim=1)
+        # attention_scores = self.attention(partial)
+        ga_features = self.transformer(coarse_point_cloud)
+        ga_features = self.project_back(ga_features)
+
+        # attention_scores = attention_scores.view(B, 224, 1024)
+        # global_feature = torch.cat((global_feature, attention_scores), dim=1)
         #########################
 
         global_feature = torch.max(global_feature, dim=1)[0] # B 1024
 
-
         rebuild_feature = torch.cat([
             global_feature.unsqueeze(-2).expand(-1, M, -1),
             q,
-            coarse_point_cloud], dim=-1)  # B M 1027 + C
+            ga_features], dim=-1)  # B M 1027 + C
 
         rebuild_feature = pointr.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
 
@@ -105,3 +121,35 @@ class GAFold(nn.Module):
         fps_idx = pointnet2_utils.furthest_point_sample(pc, num) 
         sub_pc = pointnet2_utils.gather_operation(pc.transpose(1, 2).contiguous(), fps_idx).transpose(1,2).contiguous()
         return sub_pc
+    
+
+    # def recontruct(self, pointr, pointr_parameters, ga_features):
+    #     # Extract PoinTr parameters:
+    #     coarse_point_cloud = pointr_parameters['coarse_point_cloud']
+    #     x = pointr_parameters['rebuild_feature']
+    #     xyz = pointr_parameters['xyz']
+    #     B, M, C = pointr_parameters['BMC']
+    #     q = pointr_parameters['q']
+
+    #     # PoinTr reconstruction with GA
+    #     global_feature = pointr.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
+    #     global_feature = torch.max(global_feature, dim=1)[0] # B 1024
+    #     rebuild_feature = torch.cat([
+    #         global_feature.unsqueeze(-2).expand(-1, M, -1),
+    #         q,
+    #         ga_features], dim=-1)  # B M 1027 + C
+
+    #     rebuild_feature = pointr.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
+
+    #     # NOTE: foldingNet
+    #     relative_xyz = pointr.foldingnet(rebuild_feature).reshape(B, M, 3, -1)    # B M 3 S
+    #     rebuild_points = (relative_xyz + coarse_point_cloud.unsqueeze(-1)).transpose(2,3).reshape(B, -1, 3)  # B N 3
+
+    #     # cat the input
+    #     inp_sparse = self.fps(xyz, pointr.num_query)
+    #     coarse_point_cloud = torch.cat([coarse_point_cloud, inp_sparse], dim=1).contiguous()
+    #     rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()       
+    #     return rebuild_points
+    
+
+

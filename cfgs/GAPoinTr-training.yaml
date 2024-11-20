@@ -1,18 +1,22 @@
-batch_size: 16
-embed_dim: 8
-epochs: 1
-losses:
-  ChDL1:
-    type: ChamferDistanceL1
-  ChDL2:
-    type: ChamferDistanceL2
-optimizer:
-  kwargs:
-    lr: 0.0001
-    weight_decay: 0.0005
-  type: AdamW
-override_cache: true
+### PoinTr
 pointr_config: PCN_models
-run_counter: '1'
-run_name: train
+
+### Dataset
+
+
+### Training parameters
+batch_size: 16
+embed_dim: 8 # 3D clifford algebra
+epochs: 1
+optimizer : {
+  type: AdamW,
+  kwargs: {
+  lr : 0.0005, 
+  weight_decay : 0.0005
+}}
+
+### Saving parameters
+debug: false
+override_cache: false
+run_name: cdl1_sparse_dense
 save_path: saves/training/

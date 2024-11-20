@@ -26,7 +26,7 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GAFold import GAFold
+from models.ga_models.GAPoinTr import GAFeatures
 
 # Metrics
 from extensions.chamfer_dist import (
@@ -35,6 +35,8 @@ from extensions.chamfer_dist import (
 )
 
 if __name__ == '__main__':
+
+    run_name = "cdl1_sparse_dense_0"
 
     output_dir = BASE_DIR + "/../results/demonet/"
     os.makedirs(output_dir, exist_ok=True)
@@ -132,13 +134,15 @@ if __name__ == '__main__':
     print("\nBuilding GAPoinTr...")
     ga_checkpoints = os.path.join(
         BASE_DIR, 
-        # f"../saves/training/{config_type.lower()}_train_0/model_state_dict.pt"
-        f"../saves/training/pcn_models_1/model_state_dict.pt"
+        f"../saves/training/{config_type}/{run_name}/model_state_dict.pt"
+        # f"../saves/training//model_state_dict.pt"
     )
     print(f"Loading checkpoints from: {ga_checkpoints}")
-    model = GAFold(
+    model = GAFeatures(
         algebra=algebra,  
-        embed_dim=8
+        embed_dim=8,
+        hidden_dim=256,
+        pointr=pointr
     )
     model = model.to(device)
     model.load_state_dict(
@@ -158,7 +162,7 @@ if __name__ == '__main__':
     print(f"Model Size: {model_size_mb:.2f} MB")
 
     print("\nGAPoinTr inference...")
-    output = model(input_for_pointr, pointr, pointr_parametrs)
+    output = model(pointr, pointr_parametrs)
     print(f'Shape of refined output: {output.shape}')
     print("done")
 

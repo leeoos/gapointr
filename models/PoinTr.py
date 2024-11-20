@@ -92,7 +92,6 @@ class PoinTr(nn.Module):
 
     def forward(self, xyz):
         q, coarse_point_cloud = self.base_model(xyz) # B M C and B M 3
-    
         B, M ,C = q.shape
 
         # Collect parameters
@@ -110,6 +109,7 @@ class PoinTr(nn.Module):
             global_feature.unsqueeze(-2).expand(-1, M, -1),
             q,
             coarse_point_cloud], dim=-1)  # B M 1027 + C
+        
 
         rebuild_feature = self.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
         # # NOTE: try to rebuild pc

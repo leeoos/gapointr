@@ -27,6 +27,7 @@ from extensions.chamfer_dist import (
     ChamferDistanceL1, 
     ChamferDistanceL2
 )
+from pointnet2_ops import pointnet2_utils
 
 # MVP Dataset  
 from mvp.mvp_dataset import MVPDataset
@@ -35,16 +36,16 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GAFold import GAFold
-from models.ga_models.MVFormer import SelfAttentionGA
+from models.ga_models.GAPoinTr import GAFeatures
 
 
 class Trainer():
 
-    def __init__(self, parameters, algebra, logger) -> None:
+    def __init__(self, parameters, algebra, logger, debug=False) -> None:
         self.parameters = parameters
         self.algebra = algebra
         self.logger = logger
+        self.debug = debug
 
 
     def train(self, backbone, model, dataloader) -> None:
@@ -60,12 +61,11 @@ class Trainer():
         losses = self.parameters['losses']
 
         # To refine 
-        loss_fn1 = losses['ChDL1']
-        loss_fn2 = losses['ChDL2']
+        loss_fn = losses['ChDL1']
 
-        print("\nLosses:")
-        print(loss_fn1)
-        print(loss_fn2)
+        print("\nAvailabel Losses:")
+        print(losses)
+
         print("\nOptimizer:")
         print(optimizer)
     
@@ -85,12 +85,14 @@ class Trainer():
                         # Pass partial pcd to PoinTr
                         pointr_parameters = {}
                         with torch.no_grad():
-                            pointr_parameters = backbone(partial)[-1]
+                            pointr_output = backbone(partial)
+                            pointr_parameters = pointr_output[-1]
 
                         # Pass trough GA model
-                        output = model(partial, backbone, pointr_parameters)
+                        output = model(backbone, pointr_parameters)
 
-                        loss = loss_fn1(output, complete) + loss_fn2(output, complete)
+                        # loss = loss_fn(output, complete) #+ loss_fn2(output, complete)
+                        loss = loss_fn(output, complete) + loss_fn(pointr_output[0], complete)
                         loss.backward()
                         optimizer.step()
                         epoch_loss += loss.item()
@@ -109,10 +111,13 @@ class Trainer():
                             gc.collect()
                             torch.cuda.empty_cache()
                             gc.collect()
+                        
+                        if self.debug: break
             
                 epoch_loss = epoch_loss/(step + 1)
                 pbar.set_postfix(epoch_train=epoch_loss)
                 pbar.update(1)
+
                 
 def main():
 
@@ -120,11 +125,6 @@ def main():
     training_config = os.path.join(BASE_DIR, '../cfgs/GAPoinTr-training.yaml')
     with open(training_config, "r") as file:
         config = yaml.safe_load(file)
-
-    # Saving path
-    save_dir = os.path.join(
-        BASE_DIR, '..', config['save_path'], config['pointr_config'].lower()
-    )
     
     # Setup logging
     os.makedirs(BASE_DIR + "../logs", exist_ok=True)
@@ -144,15 +144,16 @@ def main():
     print("\nBuilding MVP Dataset...")
     data_path = BASE_DIR + "/../mvp/datasets/"
     train_data_path = data_path + "MVP_Train_CP.h5"
-    logger.info(f"data directory: {data_path}")
+    logger.info(f"Data directory: {data_path}")
     load_train_dataset = h5py.File(train_data_path, 'r')
     train_dataset = MVPDataset(load_train_dataset, logger=logger)
     logger.info(f"lenght of train dataset: {len(train_dataset)}")
-    print(train_dataset)
+    print((f"Lenght of train dataset: {len(train_dataset)}"))
 
     # Make dataloader
     train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True)
-    print(f"Number of batches: {len(train_dataloader)}")
+    logger.info(f"Number of training batches: {len(train_dataloader)}")
+    print(f"Number of training batches: {len(train_dataloader)}")
     print("done")
 
     # Build algebra
@@ -182,9 +183,11 @@ def main():
 
     # Define custom model
     print("\nBuilding GAPoinTr...")
-    model = GAFold(
+    model = GAFeatures(
         algebra=algebra,  
-        embed_dim=config['embed_dim']
+        embed_dim=config['embed_dim'],
+        hidden_dim=256,
+        pointr=pointr
     )
     model = model.to(device)
     param_device = next(model.parameters()).device
@@ -192,9 +195,11 @@ def main():
 
     # GAPoinTr parametr estimation
     total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     param_size_bytes = total_params * 4  # Assuming float32
     model_size_mb = param_size_bytes / (1024 ** 2)
     print(f"Total Parameters: {total_params}")
+    print(f"Trainable Parameters: {trainable_params}")
     print(f"Model Size: {model_size_mb:.2f} MB")
     print("done")
 
@@ -218,7 +223,8 @@ def main():
     trainer = Trainer(
         parameters=parameters,
         algebra=algebra,
-        logger=logger
+        logger=logger,
+        debug=config['debug']
     )
     trainer.train(
         backbone=pointr,
@@ -226,25 +232,37 @@ def main():
         dataloader=train_dataloader
     )
 
-    # Saving train output
+    # Saving path
+    save_dir = os.path.join(
+        BASE_DIR, '..', 
+        config['save_path'], 
+        config['pointr_config'],
+    )
+
+    # Saving train result
     if config['override_cache']:
-        run_counter = config['run_counter']
-        run_counter = str(int(run_counter) + 1)
-        save_dir = os.path.join(save_dir, "_"+run_counter)
-        config['run_counter'] = run_counter
-        with open(training_config, "w") as cfile:
-            yaml.dump(config, cfile)
+        save_dir = os.path.join(save_dir, config['run_name'].lower())
+        save_dir = save_dir+"_0"
         os.makedirs(save_dir, exist_ok=True)
 
     else:
+        run_counter = 0
+        for file in os.listdir(save_dir):
+            if config['run_name'].split('_') == file.split('_')[:-1]: 
+                run_counter += 1
+        save_dir = os.path.join(save_dir, config['run_name'].lower())
+        save_dir = save_dir+"_"+str(run_counter)
         os.makedirs(save_dir, exist_ok=True)
 
     save_file = os.path.join(save_dir, "model_state_dict.pt")
-    print(f"\nSaving checkpoints in: {save_dir}")
-    torch.save(
-        model.state_dict(), 
-        save_file
-    )
+    logger.info(f"\nSaving checkpoints in: {save_dir}")
+    if not config['debug']:
+        print(f"\nSaving checkpoints in: {save_dir}")
+        torch.save(
+            model.state_dict(), 
+            save_file
+        )
+    # with open()
     
 if __name__ == "__main__":
     main()
