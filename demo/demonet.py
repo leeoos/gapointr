@@ -36,7 +36,7 @@ from extensions.chamfer_dist import (
 
 if __name__ == '__main__':
 
-    run_name = "cdl1_sparse_dense_0"
+    run_name = "cdl1_sparse_dense_1"
 
     output_dir = BASE_DIR + "/../results/demonet/"
     os.makedirs(output_dir, exist_ok=True)

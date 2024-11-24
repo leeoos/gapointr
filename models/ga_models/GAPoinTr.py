@@ -62,7 +62,7 @@ class GAFeatures(nn.Module):
         self.transformer = TransformerEncoderGA(
             algebra, 
             embed_dim, 
-            hidden_dim=128, 
+            hidden_dim=hidden_dim, # fixed value for old models --> 128, 
             num_layers=2
         )
         # self.foldingnet = Fold(384, step = 8, hidden_dim = 256) 

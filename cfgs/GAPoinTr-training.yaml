@@ -1,7 +1,13 @@
 ### PoinTr
 pointr_config: PCN_models
 
+### GAPoinTr
+resume: false
+
 ### Dataset
+train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
+test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
+val_dataset: ''
 
 
 ### Training parameters
@@ -11,7 +17,7 @@ epochs: 1
 optimizer : {
   type: AdamW,
   kwargs: {
-  lr : 0.0005, 
+  lr : 0.005, 
   weight_decay : 0.0005
 }}
 

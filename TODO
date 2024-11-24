@@ -1,4 +1,13 @@
-[ ] MVFormer for feature extraction
+[X] MVFormer for feature extraction
 [X] Integrate MVFormer in PoinTr
 [X] Try to training
-[X] Combine L1 and L2 chamfer loss
+[X] Combine L1 chamfer loss on dense and coarse
+[ ] Make test function
+[ ] Make validation split
+[ ] Implement early stopping
+[ ] Collect train los for plot
+[ ] Save train configuration for each run 
+[ ] Load saved configuration in demonet
+[ ] Set train and test data from config
+[X] Split trainer and main
+[ ] Test across datasets

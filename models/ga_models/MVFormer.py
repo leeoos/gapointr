@@ -140,7 +140,6 @@ class GeometricProductAttention(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, 1)
         )
-
         self.dropout = nn.Dropout(p=0.5)
 
     def forward(self, x):

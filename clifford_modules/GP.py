@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from .MVLinear import MVLinear
-from .normalization import NormalizationLayer
+from .Normalization import NormalizationLayer
 
 
 class SteerableGeometricProductLayer(nn.Module):
