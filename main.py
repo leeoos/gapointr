@@ -7,14 +7,18 @@ import h5py
 import yaml
 import torch
 import logging
-from tqdm import tqdm
+# from torchinfo import summary # pip install torchinfo
 from torch.utils.data import DataLoader
 from torch.optim import (
     AdamW
 )
+from torch.optim.lr_scheduler import LambdaLR
 availabel_optimizers = {
-    'AdamW': AdamW
+    'AdamW': AdamW,
+    'LambdaLR': LambdaLR,
 }
+
+import random
 
 # Setup base directory and add file to python path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,24 +28,27 @@ sys.path.append(os.path.join(BASE_DIR, '../'))
 from utils import misc
 from tools import builder
 from tools import training
-from utils.config import cfg_from_yaml_file,  get_instance
+from utils.config import (
+    cfg_from_yaml_file,  
+    get_instance, 
+    model_info,
+    model_summary
+)
 from extensions.chamfer_dist import (
     ChamferDistanceL1, 
     ChamferDistanceL2
 )
 from pointnet2_ops import pointnet2_utils
 
-# MVP Dataset  
+# Dataset
+from datasets import build_dataset_from_cfg  
 from mvp.mvp_dataset import MVPDataset
 
 # Clifford Algebra
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GAPoinTr import GAFeatures
-
-
-
+# from models.GAPoinTr import GAFeatures
 
 def main():
     # Here insert argparser and select between train and test
@@ -67,8 +74,7 @@ def main():
 
     # Build MVP dataset
     print("\nBuilding MVP Dataset...")
-    # data_path = BASE_DIR + "/../mvp/datasets/"
-    # logger.info(f"Data directory: {data_path}")
+    logger.info(f"Datasets: {config['train_dataset']}\t{config['test_dataset']}")
     train_data_path = config['train_dataset'] #data_path + "MVP_Train_CP.h5"
     load_train_dataset = h5py.File(train_data_path, 'r')
     train_dataset = MVPDataset(load_train_dataset, logger=logger)
@@ -87,18 +93,18 @@ def main():
     print("done")
 
     # Build algebra
-    points = train_dataset[42][0] # get partial pcd to build the algebra
-    logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
-    algebra_dim = int(points.shape[1])
-    metric = [1 for i in range(algebra_dim)]
-    print("\nGenerating the algebra...")
-    algebra = CliffordAlgebra(metric)
-    print(f"algebra dimention: \t {algebra.dim}")
-    print(f"multivectors elements: \t {sum(algebra.subspaces)}")
-    print(f"number of subspaces: \t {algebra.n_subspaces}")
-    print(f"subspaces grades: \t {algebra.grades.tolist()}")
-    print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
-    print("done")
+    # points = train_dataset[42][0] # get partial pcd to build the algebra
+    # logger.info(f"shape of a single partial pointcloud: {points[0].shape}")
+    # algebra_dim = int(points.shape[1])
+    # metric = [1 for i in range(algebra_dim)]
+    # print("\nGenerating the algebra...")
+    # algebra = CliffordAlgebra(metric)
+    # print(f"algebra dimention: \t {algebra.dim}")
+    # print(f"multivectors elements: \t {sum(algebra.subspaces)}")
+    # print(f"number of subspaces: \t {algebra.n_subspaces}")
+    # print(f"subspaces grades: \t {algebra.grades.tolist()}")
+    # print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
+    # print("done")
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
@@ -110,37 +116,61 @@ def main():
     pointr = builder.model_builder(pointr_config.model)
     builder.load_model(pointr, pointr_ckp)
     pointr = pointr.to(device)
+    model_info(pointr)
+
+    # print("\nBuilding GAPoinTr...")
+    # gapointr_init_config = os.path.join(
+    #     BASE_DIR, "cfgs", config['pointr_config'], "GAPoinTr.yaml"
+    # )
+    # with open(gapointr_init_config, "r") as ga_file:
+    #     ga_config = yaml.safe_load(ga_file)
+    # gapointr_ckp = os.path.join(BASE_DIR, "ckpts", config['pointr_config'], "pointr.pth")
+    # gapointr_config = cfg_from_yaml_file(gapointr_init_config, root=BASE_DIR+"/")
+    # gapointr = builder.model_builder(gapointr_config.model)
+    # builder.load_model(gapointr, gapointr_ckp)
+    # gapointr = gapointr.to(device)
+    # model_info(gapointr)
+
+    # # Torch Info: pip install torchinfo
+    # if config['debug']: 
+    #     model_summary(gapointr)
+    #     input_shape = train_dataset[42][0].shape
+    #     summary(gapointr, input_size=(config['batch_size'], *input_shape))
+
 
     # Define custom model
-    print("\nBuilding GAPoinTr...")
-    model = GAFeatures(
-        algebra=algebra,  
-        embed_dim=config['embed_dim'],
-        hidden_dim=256,
-        pointr=pointr
-    )
-    model = model.to(device)
-    param_device = next(model.parameters()).device
-    logger.info(f"model parameters device: {param_device}") 
-
-    # GAPoinTr parametr estimation
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    param_size_bytes = total_params * 4  # Assuming float32
-    model_size_mb = param_size_bytes / (1024 ** 2)
-    print(f"Total Parameters: {total_params}")
-    print(f"Trainable Parameters: {trainable_params}")
-    print(f"Model Size: {model_size_mb:.2f} MB")
-    print("done")
+    # print("\nBuilding GAPoinTr...")
+    # gapointr = GAFeatures(
+    #     algebra=algebra,  
+    #     embed_dim=config['embed_dim'],
+    #     hidden_dim=256,
+    #     pointr=pointr
+    # )
+    # gapointr = gapointr.to(device)
+    # param_device = next(gapointr.parameters()).device
+    # logger.info(f"model parameters device: {param_device}") 
+    # model_info(gapointr)
 
     # Build parameters from yaml
-    parameters = {
+    # model_parameters = list(pointr.parameters()) + list(gapointr.parameters())
+    # model_parameters = list(pointr.parameters())
+    # if ga_config['model']['ga_head']:
+    #     model_parameters = list(gapointr.ga_transformer.parameters()) + list(gapointr.project_back.parameters()) + list(gapointr.foldingnet.parameters())
+    # elif ga_config['model']['ga_tail']:
+    #     model_parameters = list(gapointr.base_model.grouper.input_trans.parameters()) 
+    # else:
+    #     model_parameters = list(gapointr.parameters())
+
+    # # if config['debug']: print(model_parameters)
+    model_parameters = pointr.parameters()
+    trainer_parameters = {
         'epochs': config['epochs'],
         'optimizer': get_instance(
                         config['optimizer'], 
                         availabel_optimizers,
-                        {"params": model.parameters()}
+                        {"params": model_parameters}
                     ),
+        'scheduler': None,
         'device': device,
         'losses':  {
             'ChDL1': ChamferDistanceL1(),
@@ -148,57 +178,55 @@ def main():
         }
     }
 
+    # Set up saving directory
+    run_name = 'pointr'
+    # if ga_config['model']['ga_head'] and not ga_config['model']['ga_tail']:
+    #     run_name += "_head"
+    # elif ga_config['model']['ga_tail'] and not ga_config['model']['ga_head']:
+    #     run_name += "_tail"
+    # elif ga_config['model']['ga_head'] and not ga_config['model']['ga_tail']:
+    #     run_name += "_head_tail"
+
+    save_dir = os.path.join(
+        BASE_DIR,
+        config['save_path'], 
+        config['pointr_config'],
+    )
+    run_counter = 0
+    for file in os.listdir(save_dir):
+        if run_name.split('_') == file.split('_')[:-1]: 
+            run_counter += 1
+    if config['override_cache'] and run_counter > 0: run_counter -= 1
+    save_dir = os.path.join(save_dir, run_name)
+    save_dir = save_dir+"_"+str(run_counter)
+    # os.makedirs(save_dir, exist_ok=True)
+    logger.info(f"\nSaving checkpoints in: {save_dir}")
+    logger.info(f"\nSaving losses in: {save_dir}")
+
     # Training
     print("\nTraining")
     trainer = training.Trainer(
-        parameters=parameters,
-        algebra=algebra,
+        parameters=trainer_parameters,
         logger=logger,
         debug=config['debug']
     )
     trainer.train(
         backbone=pointr,
-        model=model,
-        dataloader=train_dataloader
+        model=pointr,
+        dataloader=train_dataloader,
+        save_path=save_dir
     )
-    print("End of training!")
+    print("\nEnd of training!\n")
 
-    # Saving path
-    save_dir = os.path.join(
-        BASE_DIR, '..', 
-        config['save_path'], 
-        config['pointr_config'],
-    )
-    trainer.test(
-        backbone=pointr,
-        model=model,
-        dataloader=test_dataloader
-    )
-    print(f"Test loss: {trainer.test_loss:5f}")
-
-    # Saving train result
-    run_counter = 0
-    for file in os.listdir(save_dir):
-        if config['run_name'].split('_') == file.split('_')[:-1]: 
-            run_counter += 1
-    if config['override_cache']and run_counter > 0: run_counter -= 1
-    save_dir = os.path.join(save_dir, config['run_name'].lower())
-    save_dir = save_dir+"_"+str(run_counter)
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Saving
-    save_file = os.path.join(save_dir, "model_state_dict.pt")
-    save_loss = os.path.join(save_dir, "train_losses.json")
-    logger.info(f"\nSaving checkpoints in: {save_dir}")
-    logger.info(f"\nSaving losses in: {save_dir}")
-    if not config['debug']:
-        print(f"\nSaving checkpoints in: {save_dir}")
-        torch.save(
-            model.state_dict(), 
-            save_file
+    # Test
+    if config['test']:
+        trainer.test(
+            backbone=pointr,
+            model=None,
+            dataloader=test_dataloader
         )
-        with open(save_loss, "w") as l_file:
-            json.dump(trainer.loss_trend, l_file, indent=4)
+        print(f"Test loss: {trainer.test_loss:5f}")
+
 
  
 if __name__ == "__main__":

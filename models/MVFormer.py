@@ -9,7 +9,7 @@ from utils.ga_utils import fast_einsum, unsqueeze_like
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 from clifford_modules.MVLinear import MVLinear
 
-NUM_OF_POINTS = 224 #2048
+NUM_OF_POINTS = 224 # 2048 #
 
 class NormalizationLayer(nn.Module):
     """
@@ -48,7 +48,7 @@ class NormalizationLayer(nn.Module):
     
 
 class FullyConnectedSteerableGeometricProductLayer(nn.Module):
-    def __init__(self, algebra, features):
+    def __init__(self, algebra, features, seq_lenght):
         """
         Fully connected steerable geometric product layer: a nn Module used to compute pairwise geometric products between multivectors of a same input sequence.
 
@@ -61,8 +61,8 @@ class FullyConnectedSteerableGeometricProductLayer(nn.Module):
         self.features = features
 
         self.normalization = NormalizationLayer(algebra, features) # to change
-        self.q_prj = MVLinear(algebra, NUM_OF_POINTS, NUM_OF_POINTS)
-        self.k_prj = MVLinear(algebra, NUM_OF_POINTS, NUM_OF_POINTS)
+        self.q_prj = MVLinear(algebra, seq_lenght, seq_lenght)
+        self.k_prj = MVLinear(algebra, seq_lenght, seq_lenght)
 
     # @torch.jit.script
     def forward(self, input):
@@ -120,7 +120,7 @@ class FullyConnectedSteerableGeometricProductLayer(nn.Module):
 
 
 class GeometricProductAttention(nn.Module):
-    def __init__(self, algebra, embed_dim, hidden_dim):
+    def __init__(self, algebra, embed_dim, hidden_dim, seq_lenght):
         """
         Self-Attention layer using geometric algebra operation.
 
@@ -132,7 +132,7 @@ class GeometricProductAttention(nn.Module):
 
         self.algebra = algebra
         self.subspaces_dims = algebra.subspaces
-        self.gp_layer = FullyConnectedSteerableGeometricProductLayer(algebra, features=embed_dim)
+        self.gp_layer = FullyConnectedSteerableGeometricProductLayer(algebra, features=embed_dim, seq_lenght=seq_lenght)
 
         # Single projection layer to learn common propertires
         self.ffn_att_prj = nn.Sequential(
@@ -158,12 +158,12 @@ class GeometricProductAttention(nn.Module):
 
 
 class SelfAttentionGA(nn.Module):
-    def __init__(self, algebra, embed_dim, hidden_dim):
+    def __init__(self, algebra, embed_dim, hidden_dim, seq_lenght):
         super(SelfAttentionGA, self).__init__()
 
         self.algebra = algebra
         self.v_proj = nn.Linear(2**algebra.dim, embed_dim) #112)
-        self.ga_attention = GeometricProductAttention(algebra, embed_dim, hidden_dim)
+        self.ga_attention = GeometricProductAttention(algebra, embed_dim, hidden_dim, seq_lenght)
 
     def forward(self, x):
         # x = self.algebra.embed_grade(x, 1) # shape: [B, P, 8]
@@ -185,10 +185,10 @@ class SelfAttentionGA(nn.Module):
 
 
 class TransformerEncoderLayerGA(nn.Module):
-    def __init__(self, algebra, embed_dim, hidden_dim):
+    def __init__(self, algebra, embed_dim, hidden_dim, seq_lenght):
         super(TransformerEncoderLayerGA, self).__init__()
 
-        self.self_attn = SelfAttentionGA(algebra, embed_dim, hidden_dim)
+        self.self_attn = SelfAttentionGA(algebra, embed_dim, hidden_dim, seq_lenght)
 
         self.norm1 = nn.LayerNorm(embed_dim)
         # feed forward network
@@ -233,17 +233,20 @@ class TransformerEncoderLayerGA(nn.Module):
 
 
 class TransformerEncoderGA(nn.Module):
-    def __init__(self, algebra, embed_dim, hidden_dim, num_layers):
+    def __init__(self, algebra_dim, embed_dim, hidden_dim, num_layers, seq_lenght):
         super(TransformerEncoderGA, self).__init__()
 
-        self.algebra = algebra
+        metric = [1 for i in range(algebra_dim)]
+        self.algebra = CliffordAlgebra(metric)
         self.layers = nn.ModuleList([
-            TransformerEncoderLayerGA(algebra, embed_dim, hidden_dim) 
+            TransformerEncoderLayerGA(self.algebra, embed_dim, hidden_dim, seq_lenght) 
             for _ in range(num_layers)
         ])
         # self.pos_encoder = PositionalEncoding(embed_dim)
 
     def forward(self, x):
+        # print(x.shape)
+        # exit()
         x = self.algebra.embed_grade(x, 1) # geometric albebra embedding
         # x = self.pos_encoder(x)
 

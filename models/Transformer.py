@@ -4,6 +4,7 @@ import torch.nn as nn
 from timm.models.layers import DropPath,trunc_normal_
 
 from .dgcnn_group import DGCNN_Grouper
+# from .ga_dgcnn_group import GA_DGCNN_Grouper
 from utils.logger import *
 import numpy as np
 # from knn_cuda import KNN
@@ -265,9 +266,24 @@ class Block(nn.Module):
 class PCTransformer(nn.Module):
     """ Vision Transformer with support for point cloud completion
     """
-    def __init__(self, in_chans=3, embed_dim=768, depth=[6, 6], num_heads=6, mlp_ratio=2., qkv_bias=False, qk_scale=None, drop_rate=0., attn_drop_rate=0.,
-                        num_query = 224, knn_layer = -1):
+    def __init__(
+        self, 
+        in_chans=3, 
+        embed_dim=768, 
+        depth=[6, 6], 
+        num_heads=6, 
+        mlp_ratio=2., 
+        qkv_bias=False, 
+        qk_scale=None, 
+        drop_rate=0., 
+        attn_drop_rate=0.,
+        num_query = 224, 
+        knn_layer = -1
+    ):
+        
+        
         super().__init__()
+
 
         self.num_features = self.embed_dim = embed_dim
         
@@ -275,6 +291,10 @@ class PCTransformer(nn.Module):
 
         print_log(' Transformer with knn_layer %d' % self.knn_layer, logger='MODEL')
 
+        # if self.ga_tail:
+        #     print("Geometric Algebra feature extractor enable!")
+        #     self.grouper = GA_DGCNN_Grouper()  # B 3 N to B C(3) N(128) and B C(128) N(128)
+        # else:
         self.grouper = DGCNN_Grouper()  # B 3 N to B C(3) N(128) and B C(128) N(128)
 
         self.pos_embed = nn.Sequential(
@@ -386,7 +406,15 @@ class PCTransformer(nn.Module):
         '''
         # build point proxy
         bs = inpc.size(0)
+
+        # if self.ga_tail:
+        #     coor, f = self.grouper(inpc.contiguous()) 
+        # else:
+        #     coor, f = self.grouper(inpc.transpose(1,2).contiguous()) 
+
         coor, f = self.grouper(inpc.transpose(1,2).contiguous()) 
+        
+
         knn_index = get_knn_index(coor)
         # NOTE: try to use a sin wave  coor B 3 N, change the pos_embed input dim
         # pos = self.pos_encoding_sin_wave(coor).transpose(1,2)

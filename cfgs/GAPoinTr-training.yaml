@@ -2,7 +2,10 @@
 pointr_config: PCN_models
 
 ### GAPoinTr
-resume: false
+# algebra_dim: 3 # fixed for clifford algebra
+# embed_dim: 8 # fixed for clifford algebra
+# hidden_dim: 256 
+# num_layers: 2
 
 ### Dataset
 train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
@@ -11,18 +14,19 @@ val_dataset: ''
 
 
 ### Training parameters
-batch_size: 16
-embed_dim: 8 # 3D clifford algebra
+batch_size: 32
 epochs: 1
+resume: false
 optimizer : {
   type: AdamW,
   kwargs: {
-  lr : 0.005, 
+  lr : 0.0005, 
   weight_decay : 0.0005
 }}
 
 ### Saving parameters
+test: false
 debug: false
-override_cache: false
-run_name: cdl1_sparse_dense
+override_cache: true
+# run_name: cdl1_sparse_dense
 save_path: saves/training/

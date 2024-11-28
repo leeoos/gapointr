@@ -4,6 +4,8 @@ from pointnet2_ops import pointnet2_utils
 # from knn_cuda import KNN
 # knn = KNN(k=16, transpose_mode=False)
 
+from .MVFormer import TransformerEncoderGA
+
 
 def knn_point(nsample, xyz, new_xyz):
     """
@@ -46,7 +48,17 @@ class DGCNN_Grouper(nn.Module):
         '''
         K has to be 16
         '''
+
+        # self.ga_tail = ga_tail
+        # self.ga_params = ga_params
+
+        # if self.ga_tail:
+        #     self.input_trans = TransformerEncoderGA(**ga_params, seq_lenght=2048)
+        # else:
+        #     self.input_trans = nn.Conv1d(3, 8, 1)
+
         self.input_trans = nn.Conv1d(3, 8, 1)
+        
 
         self.layer1 = nn.Sequential(nn.Conv2d(16, 32, kernel_size=1, bias=False),
                                    nn.GroupNorm(4, 32),
@@ -116,28 +128,40 @@ class DGCNN_Grouper(nn.Module):
     def forward(self, x):
 
         # x: bs, 3, np
-
         # bs 3 N(128)   bs C(224)128 N(128)
         coor = x
         f = self.input_trans(x)
 
+        # if self.ga_tail:
+        #     f = f.transpose(1,2).contiguous()
+        #     coor = coor.transpose(1,2).contiguous()
+        # print(f.shape)
+
         f = self.get_graph_feature(coor, f, coor, f)
+        # print(f"\nF shape before: {f.shape}")
         f = self.layer1(f)
+        # print(f" F shape before: {f.shape}")
         f = f.max(dim=-1, keepdim=False)[0]
 
         coor_q, f_q = self.fps_downsample(coor, f, 512)
         f = self.get_graph_feature(coor_q, f_q, coor, f)
+        # print(f"\nF shape before: {f.shape}")
         f = self.layer2(f)
+        # print(f" F shape after: {f.shape}")
         f = f.max(dim=-1, keepdim=False)[0]
         coor = coor_q
 
         f = self.get_graph_feature(coor, f, coor, f)
+        # print(f"\nF shape before: {f.shape}")
         f = self.layer3(f)
+        # print(f" F shape after: {f.shape}")
         f = f.max(dim=-1, keepdim=False)[0]
 
         coor_q, f_q = self.fps_downsample(coor, f, 128)
         f = self.get_graph_feature(coor_q, f_q, coor, f)
+        # print(f"\nF shape before: {f.shape}")
         f = self.layer4(f)
+        # print(f" F shape after: {f.shape}")
         f = f.max(dim=-1, keepdim=False)[0]
         coor = coor_q
 

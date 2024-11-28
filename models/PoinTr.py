@@ -6,6 +6,8 @@ from extensions.chamfer_dist import ChamferDistanceL1
 from .Transformer import PCTransformer
 from .build import MODELS
 
+from .MVFormer import TransformerEncoderGA
+
 
 def fps(pc, num):
     fps_idx = pointnet2_utils.furthest_point_sample(pc, num) 
@@ -70,6 +72,18 @@ class PoinTr(nn.Module):
         self.base_model = PCTransformer(in_chans = 3, embed_dim = self.trans_dim, depth = [6, 8], drop_rate = 0., num_query = self.num_query, knn_layer = self.knn_layer)
         
         # print(self.fold_step, self.trans_dim)
+        # Enable addictional GA head
+        # if self.ga_head:
+        #     print("Geometric Algebra Head enable")
+        #     self.ga_transformer = TransformerEncoderGA(**self.ga_params, seq_lenght=224)
+        #     self.project_back = nn.Sequential(
+        #         nn.Linear(
+        #             2**self.ga_params['algebra_dim'], 
+        #             self.ga_params['hidden_dim']
+        #         ),
+        #         nn.ReLU(),
+        #         nn.Linear(self.ga_params['hidden_dim'], 3)
+        #     )
 
         self.foldingnet = Fold(self.trans_dim, step = self.fold_step, hidden_dim = 256)  # rebuild a cluster point
 
@@ -95,12 +109,17 @@ class PoinTr(nn.Module):
         B, M ,C = q.shape
 
         # Collect parameters
-        pointr_parameters = {
-            'coarse_point_cloud': coarse_point_cloud,
-            'xyz': xyz,
-            'BMC': (B, M ,C),
-            'q':q
-        }
+        # pointr_parameters = {
+        #     'coarse_point_cloud': coarse_point_cloud,
+        #     'xyz': xyz,
+        #     'BMC': (B, M ,C),
+        #     'q':q
+        # }
+        # if self.ga_head:
+        #     ga_features = self.ga_transformer(coarse_point_cloud)
+        #     addictional_features = self.project_back(ga_features)
+        # else:
+        #     addictional_features = coarse_point_cloud
 
         global_feature = self.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
         global_feature = torch.max(global_feature, dim=1)[0] # B 1024
@@ -129,8 +148,9 @@ class PoinTr(nn.Module):
         rebuild_points = torch.cat([rebuild_points, xyz],dim=1).contiguous()
 
         # Update parameters
-        pointr_parameters['rebuild_feature'] = rebuild_feature
+        # pointr_parameters['rebuild_feature'] = rebuild_feature
         
-        ret = (coarse_point_cloud, rebuild_points, pointr_parameters)
+        # ret = (coarse_point_cloud, rebuild_points, pointr_parameters)
+        ret = (coarse_point_cloud, rebuild_points)
         return ret
 

@@ -28,7 +28,7 @@ from torch.utils.data import DataLoader
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GAPoinTr import GAFeatures
+from models.GAPoinTr import GAFeatures
 
 # Metrics
 from extensions.chamfer_dist import (

@@ -3,6 +3,33 @@ from easydict import EasyDict
 import os
 from .logger import print_log
 
+def count_trainable_parameters(params):
+    return sum(p.numel() for p in params if p.requires_grad)
+
+def model_summary(model):
+    print("\n=== Model Summary ===")
+    print(f"Total parameters: {count_trainable_parameters(model.parameters())}")
+    
+    print("\n=== Module-wise Summary ===")
+    for name, module in model.named_children():
+        num_params = count_trainable_parameters(module.parameters())
+        print(f"Module: {name}, Trainable Parameters: {num_params}")
+        
+    print("\n=== Parameter-wise Details ===")
+    for name, param in model.named_parameters():
+        param_type = "Trainable" if param.requires_grad else "Frozen"
+        print(f"Param: {name}, Shape: {param.shape}, {param_type}")
+
+def model_info(model):
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    param_size_bytes = total_params * 4  # Assuming float32
+    model_size_mb = param_size_bytes / (1024 ** 2)
+    print(f"Total Parameters: {total_params}")
+    print(f"Trainable Parameters: {trainable_params}")
+    print(f"Model Size: {model_size_mb:.2f} MB")
+    print("done")
+
 def get_instance(config, available_classes, addictional_params={}):
     cls = available_classes[config['type']]
     params = config.get('kwargs', {})

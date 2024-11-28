@@ -13,9 +13,6 @@ git ls-tree -r -l HEAD | sort -k 4 -n -r | head -n 20
 
 
 # For later 
-- clean cfg 
-- clean models
-- clean tools
 - delete scripts
 
 

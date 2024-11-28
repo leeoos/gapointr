@@ -9,6 +9,7 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import knn_graph
+from easydict import EasyDict
 
 # Setup base directory and add file to python path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +27,8 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-from models.ga_models.GAPoinTr import GAFeatures
+# from models.GAPoinTr import GAFeatures
+from models.PoinTr import PoinTr
 
 # Metrics
 from extensions.chamfer_dist import (
@@ -38,7 +40,8 @@ if __name__ == '__main__':
 
     run_name = "cdl1_sparse_dense_1"
 
-    output_dir = BASE_DIR + "/../results/demonet/"
+    version = "pointr_0"
+    output_dir = BASE_DIR + f"/../results/demonet/{version}"
     os.makedirs(output_dir, exist_ok=True)
 
     # Setup logging
@@ -115,9 +118,10 @@ if __name__ == '__main__':
     input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
     raw_output = ret[1] #.permute(1, 2, 0)
-    pointr_parametrs = ret[-1]
     dense_points = raw_output.squeeze(0).detach().cpu().numpy()
+    coarse_points = ret[0].squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
+    coarse_img = misc.get_ptcloud_img(coarse_points)
 
     print(f"input sample shape: {input_for_pointr.shape}")
     print(f"coarse points shape: {ret[0].shape}")
@@ -127,50 +131,88 @@ if __name__ == '__main__':
 
     print("\nSaving output of PoinTr")
     cv2.imwrite(os.path.join(output_dir, 'fine.jpg'), dense_img)
+    cv2.imwrite(os.path.join(output_dir, 'coarse.jpg'), coarse_img)
     logger.info(f"images saved at: {output_dir}")
     print("done")
 
     ### TEMPORARY PART ###
-    print("\nBuilding GAPoinTr...")
-    ga_checkpoints = os.path.join(
-        BASE_DIR, 
-        f"../saves/training/{config_type}/{run_name}/model_state_dict.pt"
-        # f"../saves/training//model_state_dict.pt"
+    # print("\nBuilding GAPoinTr...")
+    # ga_checkpoints = os.path.join(
+    #     BASE_DIR, 
+    #     f"../saves/training/{config_type}/{run_name}/model_state_dict.pt"
+    #     # f"../saves/training//model_state_dict.pt"
+    # )
+    # print(f"Loading checkpoints from: {ga_checkpoints}")
+    # model = GAFeatures(
+    #     algebra=algebra,  
+    #     embed_dim=8,
+    #     hidden_dim=256,
+    #     pointr=pointr
+    # )
+    # model = model.to(device)
+    # model.load_state_dict(
+    #     torch.load(
+    #         ga_checkpoints,
+    #         weights_only=True
+    #     )
+    # )
+    # model.eval()
+    # torch.cuda.empty_cache()
+
+    # # GAPoinTr parametr estimation
+    # total_params = sum(p.numel() for p in model.parameters())
+    # param_size_bytes = total_params * 4  # Assuming float32
+    # model_size_mb = param_size_bytes / (1024 ** 2)
+    # print(f"Total Parameters: {total_params}")
+    # print(f"Model Size: {model_size_mb:.2f} MB")
+
+    # print("\nGAPoinTr inference...")
+    # output = model(pointr, pointr_parametrs)
+    # print(f'Shape of refined output: {output.shape}')
+    # print("done")
+
+    # New version
+    # print("\nBuilding GAPoinTr...")
+    # gapointr_init_config = os.path.join(
+    #     BASE_DIR, "../cfgs", config_type, "GAPoinTr.yaml"
+    # )
+    # checkpoints_file = f"saves/training/PCN_models/{version}/final/checkpoint.pt"
+    # gapointr_ckp = os.path.join(BASE_DIR, '..', checkpoints_file)
+    # gapointr_config = cfg_from_yaml_file(gapointr_init_config, root=BASE_DIR+"/../")
+    # gapointr = builder.model_builder(gapointr_config.model)
+    # builder.load_model(gapointr, gapointr_ckp)
+    # model = gapointr.to(device)
+    # print("\nGAPoinTr inference...")
+    # gapointr_output = model(input_for_pointr)
+    # output = gapointr_output[1]
+    # print(f'Shape of refined output: {output.shape}')
+    # print("done")
+    ########
+    checkpoints_file = f"saves/training/PCN_models/{version}/final/checkpoint.pt"
+    checkpoints_file = os.path.join(BASE_DIR, '..', checkpoints_file)
+    pointr_config = EasyDict(
+        {
+            'num_pred': 14336, 
+            'num_query': 224, 
+            'knn_layer': 1, 
+            'trans_dim': 384,  
+            'ga_head': False,
+            'ga_tail': False, 
+            'ga_params': False
+        }
     )
-    print(f"Loading checkpoints from: {ga_checkpoints}")
-    model = GAFeatures(
-        algebra=algebra,  
-        embed_dim=8,
-        hidden_dim=256,
-        pointr=pointr
-    )
+    model = PoinTr(pointr_config)
     model = model.to(device)
-    model.load_state_dict(
-        torch.load(
-            ga_checkpoints,
-            weights_only=True
-        )
-    )
-    model.eval()
-    torch.cuda.empty_cache()
-
-    # GAPoinTr parametr estimation
-    total_params = sum(p.numel() for p in model.parameters())
-    param_size_bytes = total_params * 4  # Assuming float32
-    model_size_mb = param_size_bytes / (1024 ** 2)
-    print(f"Total Parameters: {total_params}")
-    print(f"Model Size: {model_size_mb:.2f} MB")
-
-    print("\nGAPoinTr inference...")
-    output = model(pointr, pointr_parametrs)
-    print(f'Shape of refined output: {output.shape}')
-    print("done")
+    gapointr_ckp = torch.load(checkpoints_file, weights_only=True)
+    model.load_state_dict(gapointr_ckp['model'])
+    gapointr_output = model(input_for_pointr)
+    output = gapointr_output[1]
 
     # Saving output
     print("\nSaving output of GAPoinTr... ")
     new_dense_points = output.squeeze(0).detach().cpu().numpy()
     new_img = misc.get_ptcloud_img(new_dense_points)
-    cv2.imwrite(os.path.join(output_dir, 'new_fine.jpg'), new_img)
+    cv2.imwrite(os.path.join(output_dir, 'ga.jpg'), new_img)
     logger.info(f"output destination: {output_dir}")
     print("done")
 
