@@ -9,7 +9,6 @@ import torch
 import logging
 from copy import deepcopy
 from torch.utils.data import DataLoader
-from dataset.build import build_dataset_from_cfg
 from easydict import EasyDict
 
 # Optimizers
@@ -29,7 +28,6 @@ from extensions.chamfer_dist import (
     ChamferDistanceL2
 )
 from torch.nn import MSELoss
-
 
 # Setup base directory and add file to python path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -63,8 +61,6 @@ from models.ga.upsampler import PointCloudUpsamplerImproved
 
 def main():
 
-    # dataset = build_dataset_from_cfg(
-
     # Load training configuration file
     training_config = os.path.join(BASE_DIR, 'cfgs/GAPoinTr-training.yaml')
     with open(training_config, "r") as file:
@@ -86,17 +82,19 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logger.info(f"device: {device}")
 
-    # Build MVP dataset
+    # Build MVP dataset for training 
     print("\nBuilding MVP Dataset...")
     logger.info(f"Datasets: {config['train_dataset']}\t{config['test_dataset']}")
-    train_data_path = config['train_dataset'] #data_path + "MVP_Train_CP.h5"
+    train_data_path = config['train_dataset'] 
     load_train_dataset = h5py.File(train_data_path, 'r')
-    train_dataset = MVPDataset(load_train_dataset, logger=logger)
+    train_dataset = MVPDataset(load_train_dataset, transform_for='train', logger=logger)
     logger.info(f"lenght of train dataset: {len(train_dataset)}")
     print((f"Lenght of train dataset: {len(train_dataset)}"))
-    test_data_path = config['test_dataset'] #data_path + "MVP_Test_CP.h5"
+
+    # Build MVP dataset for testing
+    test_data_path = config['test_dataset'] 
     load_test_dataset = h5py.File(test_data_path, 'r')
-    test_dataset = MVPDataset(load_test_dataset, logger=logger)
+    test_dataset = MVPDataset(load_test_dataset, transform_for='test', logger=logger)
     logger.info(f"lenght of test dataset: {len(test_dataset)}")
 
     # Make dataloader
@@ -205,21 +203,23 @@ def main():
 
     # Test
     if config['test']:
-        checkpoints_file = f"{save_dir}/training/final/checkpoint.pt"
-        checkpoints_file = os.path.join(BASE_DIR, '..', checkpoints_file)
+        print("Testing")
+        checkpoint_file = f"{save_dir}/training/final/checkpoint.pt"
+        checkpoint_file = os.path.join(BASE_DIR, '..', checkpoint_file)
         test_model = deepcopy(model)
-        checkpoint = torch.load(checkpoints_file, weights_only=True)
+        checkpoint = torch.load(checkpoint_file, weights_only=True)
         test_model.load_state_dict(checkpoint['model'], strict=True)
 
         if config['dump_dir']:
+            print("Checking for difference between saved weights and loaded weights!")
             test_dump_file = os.path.join(dump_dir, "test_dump.txt")
             dump_all_modules_parameters(test_model, test_dump_file)
             difference = os.system(f"diff {test_dump_file} {train_dump_file}") 
             if difference > 0: 
                 print(difference)
-                exit()
+                raise Exception(f"Error in loading checpoint form {checkpoint_file}")       
+            print("No difference found!")         
 
-        print("\nTest")
         trainer.test(
             model=test_model,
             dataloader=test_dataloader,

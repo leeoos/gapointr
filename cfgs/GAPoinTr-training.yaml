@@ -7,7 +7,6 @@ version: ''
 ### Dataset
 train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
 test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
-val_dataset: ''
 
 
 ### Training parameters
@@ -26,7 +25,7 @@ test_batch: 32
 run_name: pointr-tuned-e1
 train: true
 test: true
-debug: true
+debug: false
 overwrite_run: true
 progressive_saves: false
 save_step: 1000

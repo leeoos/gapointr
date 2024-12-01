@@ -28,6 +28,7 @@ from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
 from models.PoinTr import PoinTr
+from models.PoinTrWrapper import PoinTrWrapper
 from models.ga.upsampler import PointCloudUpsamplerImproved
 
 
@@ -43,10 +44,9 @@ if __name__ == '__main__':
     version = "pointr-tuned-e1_1"
     output_dir = BASE_DIR + f"/../results/demonet/{version}"
     os.makedirs(output_dir, exist_ok=True)
-        # config_type = "KITTI_models"
-    # config_type = "PCN_models"
+    config_type = "PCN_models"
     # config_type = "ShapeNet34_models"
-    config_type = "ShapeNet55_models"
+    # config_type = "ShapeNet55_models"
 
     # Setup logging
     os.makedirs(BASE_DIR + "/../logs", exist_ok=True)
@@ -68,17 +68,35 @@ if __name__ == '__main__':
     train_data_path = data_path + "MVP_Test_CP.h5"
     logger.info(f"data directory: {data_path}")
     load_train_dataset = h5py.File(train_data_path, 'r')
-    train_dataset = MVPDataset(load_train_dataset, logger=logger, mv=26)
+    train_dataset = MVPDataset(load_train_dataset, transform_for='test', logger=logger, mv=26)
     logger.info(f"lenght of train dataset: {len(train_dataset)}")
     print("done")
 
-    # Temporary get a single sample 
+    # Get a single sample from test set for demonstartion
     random.seed(None) # reset seed to get random sample
     pcd_index = random.randint(0, len(train_dataset))
-    print(f"Selented sample: {pcd_index}")
+    print(f"Selected sample: {pcd_index}")
     partial, complete = train_dataset[pcd_index]
-    input_img = misc.get_ptcloud_img(partial)
-    complete_img = misc.get_ptcloud_img(complete)
+
+    # This is needed in case preprocess is applied
+    if isinstance(partial, torch.Tensor):
+        print("Preprocessing has been applied on data samples!")
+        print(f"Sample tensor of shape: {partial.shape}")
+        partial_pc = partial.detach().numpy()
+        complete_pc = complete.detach().numpy()
+        input_for_pointr = partial.clone().unsqueeze(0).to(device)
+        complete_shape = complete.shape
+        complete_tensor = complete.clone().unsqueeze(0).to(device)
+    else:
+        partial_pc = partial
+        complete_pc = complete
+        input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
+        complete_shape = torch.tensor(complete, dtype=torch.float32).shape
+        complete_tensor = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
+
+    # Get input images form dataet samples
+    input_img = misc.get_ptcloud_img(partial_pc)
+    complete_img = misc.get_ptcloud_img(complete_pc)
     cv2.imwrite(os.path.join(output_dir, 'partial.jpg'), input_img)
     cv2.imwrite(os.path.join(output_dir, 'complete.jpg'), complete_img)
     logger.info(f"shape of a single partial pointcloud: {partial[0].shape}")
@@ -97,18 +115,16 @@ if __name__ == '__main__':
 
     # PoinTr inference
     print("\nPoinTr inference...")
-    input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
     raw_output = ret[1] #.permute(1, 2, 0)
     dense_points = raw_output.squeeze(0).detach().cpu().numpy()
     coarse_points = ret[0].squeeze(0).detach().cpu().numpy()
     dense_img = misc.get_ptcloud_img(dense_points)
     coarse_img = misc.get_ptcloud_img(coarse_points)
-
     print(f"input sample shape: {input_for_pointr.shape}")
+    print(f"complete reference shape: {complete_shape}")
     print(f"coarse points shape: {ret[0].shape}")
     print(f"dense points shape: {raw_output.shape}")
-    print(f"complete reference shape: {torch.tensor(complete, dtype=torch.float32).shape}")
     print("done")
 
     print("\nSaving output of PoinTr")
@@ -124,50 +140,8 @@ if __name__ == '__main__':
         f"../saves/training/{config_type}/{version}/final/checkpoint.pt"
     )
     print(f"Loading checkpoints from: {ga_checkpoints}")
-    # model = MVFormer(
-    #     algebra_dim = 3, 
-    #     embed_dim = 8, 
-    #     hidden_dim = 256, 
-    #     num_layers = 2, 
-    #     seq_lenght = 448,
-    # )
-    # model = PointCloudUpsamplerImproved(
-    #     input_points=448, 
-    #     output_points=2048
-    # )
-    # model.load_state_dict(
-    #     torch.load(
-    #         ga_checkpoints,
-    #         weights_only=True
-    #     )['model']
-    # )
-    # model = model.to(device)
-    # model.eval()
-    # model_info(model)
-    # torch.cuda.empty_cache()
-    # checkpoints_file = f"saves/PCN_models/{version}/training/final/checkpoint.pt"
-    # checkpoints_file = os.path.join(BASE_DIR, '..', checkpoints_file)
-    # pointr_config = EasyDict(
-    #     {
-    #         'num_pred': 14336, 
-    #         'num_query': 224, 
-    #         'knn_layer': 1, 
-    #         'trans_dim': 384,  
-    #     }
-    # )
-    # model = PoinTr(pointr_config)
-
-    # model = model.to(device)
-    # gapointr_ckp = torch.load(checkpoints_file)
-    # model.load_state_dict(gapointr_ckp['model'])
-    model = pointr
-    # print("after load")
-    # for name, param in model.named_parameters():
-    #     print(f"Parameter Name: {name}")
-    #     print(f"Shape: {param.size()}")
-    #     print(f"Values:\n{param.data}")
-
-    # Custom inference
+    model = PoinTrWrapper(pointr)
+    model_info(model)
     output = model(input_for_pointr)[-1]
 
     # Saving output
@@ -181,7 +155,6 @@ if __name__ == '__main__':
     # Chamfer Distance helper function
     print("\nQuantitative evaluation")
     chamfer_dist_l1 = ChamferDistanceL1()
-    complete_tensor = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
     print(f"Chamfer distance Partial: {chamfer_dist_l1(input_for_pointr, complete_tensor)}")
     print(f"Chamfer distance Coarse: {chamfer_dist_l1(ret[0], complete_tensor)}")
     print(f"Chamfer distance Fine: {chamfer_dist_l1(raw_output, complete_tensor)}")
