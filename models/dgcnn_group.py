@@ -4,7 +4,7 @@ from pointnet2_ops import pointnet2_utils
 # from knn_cuda import KNN
 # knn = KNN(k=16, transpose_mode=False)
 
-from .MVFormer import TransformerEncoderGA
+from .ga.MVFormer import TransformerEncoderGA
 
 
 def knn_point(nsample, xyz, new_xyz):
@@ -48,14 +48,6 @@ class DGCNN_Grouper(nn.Module):
         '''
         K has to be 16
         '''
-
-        # self.ga_tail = ga_tail
-        # self.ga_params = ga_params
-
-        # if self.ga_tail:
-        #     self.input_trans = TransformerEncoderGA(**ga_params, seq_lenght=2048)
-        # else:
-        #     self.input_trans = nn.Conv1d(3, 8, 1)
 
         self.input_trans = nn.Conv1d(3, 8, 1)
         
@@ -131,11 +123,6 @@ class DGCNN_Grouper(nn.Module):
         # bs 3 N(128)   bs C(224)128 N(128)
         coor = x
         f = self.input_trans(x)
-
-        # if self.ga_tail:
-        #     f = f.transpose(1,2).contiguous()
-        #     coor = coor.transpose(1,2).contiguous()
-        # print(f.shape)
 
         f = self.get_graph_feature(coor, f, coor, f)
         # print(f"\nF shape before: {f.shape}")

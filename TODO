@@ -2,12 +2,16 @@
 [X] Integrate MVFormer in PoinTr
 [X] Try to training
 [X] Combine L1 chamfer loss on dense and coarse
-[ ] Make test function
+[X] Make test function
 [ ] Make validation split
 [ ] Implement early stopping
-[ ] Collect train los for plot
-[ ] Save train configuration for each run 
+[X] Collect train loss for plot
+[X] Save train configuration for each run 
 [ ] Load saved configuration in demonet
-[ ] Set train and test data from config
+[X] Set train and test data from config
 [X] Split trainer and main
-[ ] Test across datasets
+[ ] Demo configuration
+[ ] Standard training for 4 versions PoinTr + custom
+[ ] Load PoinTr pretrained or not 
+[ ] Select model to test
+[ ] Make loss dict

@@ -291,10 +291,6 @@ class PCTransformer(nn.Module):
 
         print_log(' Transformer with knn_layer %d' % self.knn_layer, logger='MODEL')
 
-        # if self.ga_tail:
-        #     print("Geometric Algebra feature extractor enable!")
-        #     self.grouper = GA_DGCNN_Grouper()  # B 3 N to B C(3) N(128) and B C(128) N(128)
-        # else:
         self.grouper = DGCNN_Grouper()  # B 3 N to B C(3) N(128) and B C(128) N(128)
 
         self.pos_embed = nn.Sequential(
@@ -406,12 +402,6 @@ class PCTransformer(nn.Module):
         '''
         # build point proxy
         bs = inpc.size(0)
-
-        # if self.ga_tail:
-        #     coor, f = self.grouper(inpc.contiguous()) 
-        # else:
-        #     coor, f = self.grouper(inpc.transpose(1,2).contiguous()) 
-
         coor, f = self.grouper(inpc.transpose(1,2).contiguous()) 
         
 

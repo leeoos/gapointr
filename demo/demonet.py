@@ -18,7 +18,7 @@ sys.path.append(os.path.join(BASE_DIR, '../'))
 # PoinTr imports
 from utils import misc
 from tools import builder
-from utils.config import cfg_from_yaml_file
+from utils.config import cfg_from_yaml_file, model_info
 
 # Dataset  
 from mvp.mvp_dataset import MVPDataset
@@ -27,8 +27,9 @@ from mvp.mvp_dataset import MVPDataset
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 
 # Models
-# from models.GAPoinTr import GAFeatures
 from models.PoinTr import PoinTr
+from models.ga.upsampler import PointCloudUpsamplerImproved
+
 
 # Metrics
 from extensions.chamfer_dist import (
@@ -38,11 +39,14 @@ from extensions.chamfer_dist import (
 
 if __name__ == '__main__':
 
-    run_name = "cdl1_sparse_dense_1"
-
-    version = "pointr_0"
+    # GET THIS INFO FROM CONFIG
+    version = "pointr-tuned-e1_1"
     output_dir = BASE_DIR + f"/../results/demonet/{version}"
     os.makedirs(output_dir, exist_ok=True)
+        # config_type = "KITTI_models"
+    # config_type = "PCN_models"
+    # config_type = "ShapeNet34_models"
+    config_type = "ShapeNet55_models"
 
     # Setup logging
     os.makedirs(BASE_DIR + "/../logs", exist_ok=True)
@@ -71,7 +75,7 @@ if __name__ == '__main__':
     # Temporary get a single sample 
     random.seed(None) # reset seed to get random sample
     pcd_index = random.randint(0, len(train_dataset))
-    # print(pcd_index)
+    print(f"Selented sample: {pcd_index}")
     partial, complete = train_dataset[pcd_index]
     input_img = misc.get_ptcloud_img(partial)
     complete_img = misc.get_ptcloud_img(complete)
@@ -79,41 +83,19 @@ if __name__ == '__main__':
     cv2.imwrite(os.path.join(output_dir, 'complete.jpg'), complete_img)
     logger.info(f"shape of a single partial pointcloud: {partial[0].shape}")
 
-    # Build algebra
-    algebra_dim = int(partial.shape[1])
-    metric = [1 for i in range(algebra_dim)]
-    print("\nBuilding the algebra...")
-    algebra = CliffordAlgebra(metric)
-    print(f"algebra dimention: \t {algebra.dim}")
-    print(f"multivectors elements: \t {sum(algebra.subspaces)}")
-    print(f"number of subspaces: \t {algebra.n_subspaces}")
-    print(f"subspaces grades: \t {algebra.grades.tolist()}")
-    print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
-    print("done")
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
-    # config_type = "KITTI_models"
-    config_type = "PCN_models"
-    # config_type = "ShapeNet34_models"
-    # config_type = "ShapeNet55_models"
     init_config = BASE_DIR + "/../cfgs/" + config_type + "/PoinTr.yaml"
     pointr_ckpt = BASE_DIR + "/../ckpts/" + config_type +"/pointr.pth"
     config = cfg_from_yaml_file(init_config, root=BASE_DIR+"/../")
-
-    # Build PoinTr
     pointr = builder.model_builder(config.model)
     builder.load_model(pointr, pointr_ckpt)
     pointr.to(device)
     pointr.eval()
+    model_info(pointr)
 
-    # PoinTr parametr estimation
-    total_params = sum(p.numel() for p in pointr.parameters())
-    param_size_bytes = total_params * 4  # Assuming float32
-    model_size_mb = param_size_bytes / (1024 ** 2)
-    print(f"Total Parameters: {total_params}")
-    print(f"Model Size: {model_size_mb:.2f} MB")
-
+    # PoinTr inference
     print("\nPoinTr inference...")
     input_for_pointr = torch.tensor(partial, dtype=torch.float32).unsqueeze(0).to(device)
     ret = pointr(input_for_pointr)
@@ -136,77 +118,57 @@ if __name__ == '__main__':
     print("done")
 
     ### TEMPORARY PART ###
-    # print("\nBuilding GAPoinTr...")
-    # ga_checkpoints = os.path.join(
-    #     BASE_DIR, 
-    #     f"../saves/training/{config_type}/{run_name}/model_state_dict.pt"
-    #     # f"../saves/training//model_state_dict.pt"
+    print("\nBuilding Custom model...")
+    ga_checkpoints = os.path.join(
+        BASE_DIR, 
+        f"../saves/training/{config_type}/{version}/final/checkpoint.pt"
+    )
+    print(f"Loading checkpoints from: {ga_checkpoints}")
+    # model = MVFormer(
+    #     algebra_dim = 3, 
+    #     embed_dim = 8, 
+    #     hidden_dim = 256, 
+    #     num_layers = 2, 
+    #     seq_lenght = 448,
     # )
-    # print(f"Loading checkpoints from: {ga_checkpoints}")
-    # model = GAFeatures(
-    #     algebra=algebra,  
-    #     embed_dim=8,
-    #     hidden_dim=256,
-    #     pointr=pointr
+    # model = PointCloudUpsamplerImproved(
+    #     input_points=448, 
+    #     output_points=2048
     # )
-    # model = model.to(device)
     # model.load_state_dict(
     #     torch.load(
     #         ga_checkpoints,
     #         weights_only=True
-    #     )
+    #     )['model']
     # )
+    # model = model.to(device)
     # model.eval()
+    # model_info(model)
     # torch.cuda.empty_cache()
-
-    # # GAPoinTr parametr estimation
-    # total_params = sum(p.numel() for p in model.parameters())
-    # param_size_bytes = total_params * 4  # Assuming float32
-    # model_size_mb = param_size_bytes / (1024 ** 2)
-    # print(f"Total Parameters: {total_params}")
-    # print(f"Model Size: {model_size_mb:.2f} MB")
-
-    # print("\nGAPoinTr inference...")
-    # output = model(pointr, pointr_parametrs)
-    # print(f'Shape of refined output: {output.shape}')
-    # print("done")
-
-    # New version
-    # print("\nBuilding GAPoinTr...")
-    # gapointr_init_config = os.path.join(
-    #     BASE_DIR, "../cfgs", config_type, "GAPoinTr.yaml"
+    # checkpoints_file = f"saves/PCN_models/{version}/training/final/checkpoint.pt"
+    # checkpoints_file = os.path.join(BASE_DIR, '..', checkpoints_file)
+    # pointr_config = EasyDict(
+    #     {
+    #         'num_pred': 14336, 
+    #         'num_query': 224, 
+    #         'knn_layer': 1, 
+    #         'trans_dim': 384,  
+    #     }
     # )
-    # checkpoints_file = f"saves/training/PCN_models/{version}/final/checkpoint.pt"
-    # gapointr_ckp = os.path.join(BASE_DIR, '..', checkpoints_file)
-    # gapointr_config = cfg_from_yaml_file(gapointr_init_config, root=BASE_DIR+"/../")
-    # gapointr = builder.model_builder(gapointr_config.model)
-    # builder.load_model(gapointr, gapointr_ckp)
-    # model = gapointr.to(device)
-    # print("\nGAPoinTr inference...")
-    # gapointr_output = model(input_for_pointr)
-    # output = gapointr_output[1]
-    # print(f'Shape of refined output: {output.shape}')
-    # print("done")
-    ########
-    checkpoints_file = f"saves/training/PCN_models/{version}/final/checkpoint.pt"
-    checkpoints_file = os.path.join(BASE_DIR, '..', checkpoints_file)
-    pointr_config = EasyDict(
-        {
-            'num_pred': 14336, 
-            'num_query': 224, 
-            'knn_layer': 1, 
-            'trans_dim': 384,  
-            'ga_head': False,
-            'ga_tail': False, 
-            'ga_params': False
-        }
-    )
-    model = PoinTr(pointr_config)
-    model = model.to(device)
-    gapointr_ckp = torch.load(checkpoints_file, weights_only=True)
-    model.load_state_dict(gapointr_ckp['model'])
-    gapointr_output = model(input_for_pointr)
-    output = gapointr_output[1]
+    # model = PoinTr(pointr_config)
+
+    # model = model.to(device)
+    # gapointr_ckp = torch.load(checkpoints_file)
+    # model.load_state_dict(gapointr_ckp['model'])
+    model = pointr
+    # print("after load")
+    # for name, param in model.named_parameters():
+    #     print(f"Parameter Name: {name}")
+    #     print(f"Shape: {param.size()}")
+    #     print(f"Values:\n{param.data}")
+
+    # Custom inference
+    output = model(input_for_pointr)[-1]
 
     # Saving output
     print("\nSaving output of GAPoinTr... ")
@@ -220,9 +182,10 @@ if __name__ == '__main__':
     print("\nQuantitative evaluation")
     chamfer_dist_l1 = ChamferDistanceL1()
     complete_tensor = torch.tensor(complete, dtype=torch.float32).unsqueeze(0).to(device)
-    print(f"Chamfer distance Partial: {chamfer_dist_l1(ret[0], complete_tensor)}")
-    print(f"Chamfer distance PoinTr: {chamfer_dist_l1(raw_output, complete_tensor)}")
-    print(f"Chamfer distance GAPoinTr: {chamfer_dist_l1(output, complete_tensor)}")
+    print(f"Chamfer distance Partial: {chamfer_dist_l1(input_for_pointr, complete_tensor)}")
+    print(f"Chamfer distance Coarse: {chamfer_dist_l1(ret[0], complete_tensor)}")
+    print(f"Chamfer distance Fine: {chamfer_dist_l1(raw_output, complete_tensor)}")
+    print(f"Chamfer distance GAPoinTr: {chamfer_dist_l1(output, complete_tensor)}\n")
 
     # Pointr
     x_max = torch.max(raw_output[:,:,0]).item()
@@ -244,3 +207,5 @@ if __name__ == '__main__':
     print(f"Max for GAPoinTr: {x_max, y_max, z_max}")
     print(f"Min for GAPoinTr: {x_min, y_min, z_min}")
     print("All done!")
+
+

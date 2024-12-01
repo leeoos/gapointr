@@ -148,8 +148,8 @@ def load_model(base_model, ckpt_path, logger = None):
         base_ckpt = {k.replace("module.", ""): v for k, v in state_dict['base_model'].items()}
     else:
         raise RuntimeError('mismatch of ckpt weight')
-    # base_model.load_state_dict(base_ckpt, strict=True)
-    base_model.load_state_dict(base_ckpt, strict=False)
+    base_model.load_state_dict(base_ckpt, strict=True)
+    # base_model.load_state_dict(base_ckpt, strict=False)
 
     epoch = -1
     if state_dict.get('epoch') is not None:

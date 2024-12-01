@@ -238,6 +238,7 @@ class TransformerEncoderGA(nn.Module):
 
         metric = [1 for i in range(algebra_dim)]
         self.algebra = CliffordAlgebra(metric)
+
         self.layers = nn.ModuleList([
             TransformerEncoderLayerGA(self.algebra, embed_dim, hidden_dim, seq_lenght) 
             for _ in range(num_layers)
@@ -255,4 +256,18 @@ class TransformerEncoderGA(nn.Module):
             x = layer(x)
 
         return x
+    
 
+        
+
+# # Build algebra
+# algebra_dim = int(partial.shape[1])
+# metric = [1 for i in range(algebra_dim)]
+# print("\nBuilding the algebra...")
+# algebra = CliffordAlgebra(metric)
+# print(f"algebra dimention: \t {algebra.dim}")
+# print(f"multivectors elements: \t {sum(algebra.subspaces)}")
+# print(f"number of subspaces: \t {algebra.n_subspaces}")
+# print(f"subspaces grades: \t {algebra.grades.tolist()}")
+# print(f"subspaces dimentions: \t {algebra.subspaces.tolist()}")
+# print("done")

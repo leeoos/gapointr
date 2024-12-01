@@ -3,6 +3,15 @@ from easydict import EasyDict
 import os
 from .logger import print_log
 
+def dump_all_modules_parameters(model, dump_file):
+    with open(dump_file, "w+") as file:
+        for name, param in model.named_parameters():
+            file.write(f"Parameter Name: {name}\n")
+            file.write(f"Shape: {param.size()}\n")
+            file.write(f"Values:\n{param.data}\n")
+            file.write(f"\n")
+        
+
 def count_trainable_parameters(params):
     return sum(p.numel() for p in params if p.requires_grad)
 
