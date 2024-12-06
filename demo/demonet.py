@@ -2,6 +2,7 @@ import os
 import sys
 import cv2
 import h5py
+import yaml
 import torch
 import random
 import logging
@@ -29,7 +30,7 @@ from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 # Models
 from models.PoinTr import PoinTr
 from models.PoinTrWrapper import PoinTrWrapper
-from models.ga.upsampler import PointCloudUpsamplerImproved
+from models.ga.Upsampler import PointCloudUpsamplerImproved
 
 
 # Metrics
@@ -40,13 +41,32 @@ from extensions.chamfer_dist import (
 
 if __name__ == '__main__':
 
-    # GET THIS INFO FROM CONFIG
-    version = "pointr-tuned-e1_1"
+    step = "final"
+
+    # Get info from config
+    training_config = os.path.join(BASE_DIR, '../cfgs/GAPoinTr-training.yaml')
+    with open(training_config, "r") as file:
+        config = yaml.safe_load(file)
+
+    # Get latest version
+    version = config['run_name'] 
+    save_dir = os.path.join(
+        BASE_DIR,
+        '..',
+        config['save_path'], 
+        config['pointr_config'],
+    )
+    run_counter = -1
+    for file in os.listdir(save_dir):
+        if version.split('_') == file.split('_')[:-1]: 
+            run_counter += 1
+    version = version + "_" + str(run_counter)
+    print(f"Demo verison: {version}")
+
+    # Set up output
     output_dir = BASE_DIR + f"/../results/demonet/{version}"
     os.makedirs(output_dir, exist_ok=True)
-    config_type = "PCN_models"
-    # config_type = "ShapeNet34_models"
-    # config_type = "ShapeNet55_models"
+    config_type = config['pointr_config'] 
 
     # Setup logging
     os.makedirs(BASE_DIR + "/../logs", exist_ok=True)
@@ -134,13 +154,21 @@ if __name__ == '__main__':
     print("done")
 
     ### TEMPORARY PART ###
-    print("\nBuilding Custom model...")
-    ga_checkpoints = os.path.join(
+    print(f"\nBuilding Custom model: {version}")
+    checkpoint_file = os.path.join(
         BASE_DIR, 
-        f"../saves/training/{config_type}/{version}/final/checkpoint.pt"
+        f"../saves/{config_type}/{version}/training/{step}/checkpoint.pt"
     )
-    print(f"Loading checkpoints from: {ga_checkpoints}")
+    print(f"Loading checkpoints from: {checkpoint_file}")
+    # model = PointCloudUpsamplerImproved(
+    #     pointr=pointr,
+    #     input_points=448,
+    #     output_points=2048
+    # )
     model = PoinTrWrapper(pointr)
+    checkpoint = torch.load(checkpoint_file, weights_only=True)
+    model.load_state_dict(checkpoint['model'], strict=True)
+    model = model.to(device)
     model_info(model)
     output = model(input_for_pointr)[-1]
 

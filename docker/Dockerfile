@@ -24,6 +24,7 @@ RUN pip3 install torch-scatter torch-sparse torch-cluster torch-spline-conv torc
 RUN pip3 install torch-cluster -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
 # RUN pip3 install torch_geometric
 # RUN pip3 install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.0.1+cu121.html
+RUN pip3 install chamferdist
 
 # Set the working directory to /PoinTr
 WORKDIR /PoinTr

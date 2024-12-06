@@ -1,5 +1,6 @@
 ### PoinTr
 pointr_config: PCN_models
+pretrained: False
 
 ### GAPoinTr
 version: ''
@@ -11,7 +12,7 @@ test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
 
 ### Training parameters
 batch_size: 32
-epochs: 1
+epochs: 10
 resume: false
 optimizer : {
   type: AdamW,
@@ -22,12 +23,12 @@ optimizer : {
 test_batch: 32
 
 ### Run parameters
-run_name: pointr-tuned-e1
+run_name: mv-loss-medium-weight-full
 train: true
 test: true
 debug: false
-overwrite_run: true
-progressive_saves: false
-save_step: 1000
+overwrite_run: false
+progressive_saves: true
+save_step: 10000
 save_path: saves/
 dump_dir: debug/

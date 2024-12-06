@@ -51,14 +51,10 @@ class Trainer():
         self.progressive = cfg['progressive_saves']
         self.save_step = cfg['save_step']
         self.dump_file = dump_file
-
         self.loss_trend = {}
         self.test_loss = 0 
 
     def train(self, model, dataloader, save_path) -> None:
-        # backbone_device = next(backbone.parameters()).device
-        # main_model_device = next(model.parameters()).device
-        # assert backbone_device == main_model_device
 
         flush_step = 500
         epoch_loss = None
@@ -66,21 +62,14 @@ class Trainer():
         train_epochs = self.parameters.get('epochs', None)
         optimizer = self.parameters.get('optimizer', None)
         scheduler = self.parameters.get('scheduler', None)
-        losses = self.parameters.get('losses', None)
+        loss_fn = model.loss_fn
 
         # Ensure device
         model = model.to(device)
-        # backbone = backbone.to(device)
 
-        # To refine 
-        loss_fn = losses['ChDL1']
-        # loss_fn = losses['ChDL2']
-        # loss_fn = losses['MSE']
-        # loss_fn = losses['UPS']
-
-        print("\nAvailable Losses:")
-        pprint(losses)
-
+        # Info
+        print("\nTrain Loss Function:")
+        pprint(loss_fn)
         print("\nOptimizer:")
         pprint(optimizer)
     
@@ -90,43 +79,27 @@ class Trainer():
                 with tqdm(total=len(dataloader), disable=self.debug) as bbar:
                     for step, pcd in enumerate(dataloader):
 
+                        # Get samples and reset optimizer
                         partial, complete = pcd
                         optimizer.zero_grad()
 
                         # Send point clouds to device
                         partial = partial.to(device)
                         complete = complete.to(torch.float32).to(device)
-
-                        # Pass partial pcd to PoinTr
-                        # pointr_parameters = {}
-                        # with torch.no_grad():
-                        #     # print(partial.shape)
-                        #     bb_output = backbone(partial)
-                            
-                        # print(bb_output[0].shape)
                         output = model(partial)
-                        # print(output.shape)
-                        # exit()
-                        # exit()
-                        # pointr_parameters = pointr_output[-1]
 
-                        # # Pass trough GA model
-                        # output = model(backbone, pointr_parameters)
-
-                        # loss = loss_fn(output, complete) #+ loss_fn2(output, complete)
-                        # loss = loss_fn(output, complete) + loss_fn(pointr_output[0], complete)
-                        loss = loss_fn(output[-1], complete)
-                        # loss = loss_fn(output[-1], complete) # optimize only coarse
+                        # Backward step
+                        loss = loss_fn(output, complete)
                         loss.backward()
                         optimizer.step()
                         epoch_loss += loss.item()
 
                         if self.debug: print(f"loss: {loss.item()}")
-
                         bbar.set_postfix(batch_loss=loss.item())
                         bbar.update(1)
+                        self.logger.info(f"batch loss: {loss.item()}\tepoch: {(epoch + 1) // (step + 1)}")
 
-                        # collect epoch losses for statistic
+                        # Collect epoch losses for statistic
                         epoch_key = "epoch" + "_" + str(epoch)
                         if  epoch_key not in self.loss_trend.keys():
                             self.loss_trend[epoch_key] = [loss.item()]
@@ -170,45 +143,42 @@ class Trainer():
                 if self.debug: break
 
             # Final save
-            checkpoint = { 
-                'epoch': epoch,
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-            }
-            save_dir=  os.path.join(
-                save_path, "training/final"
-            )
-            os.makedirs(save_dir, exist_ok=True)
-            save_file = os.path.join(save_dir, "checkpoint.pt")
-            torch.save(checkpoint, save_file)
-            save_loss = os.path.join(save_dir, "train_losses.json")
-            with open(save_loss, "w") as l_file:
-                json.dump(self.loss_trend, l_file, indent=4)
+            if not self.debug:
+                checkpoint = { 
+                    'epoch': epoch,
+                    'model': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                }
+                save_dir=  os.path.join(
+                    save_path, "training/final"
+                )
+                os.makedirs(save_dir, exist_ok=True)
+                save_file = os.path.join(save_dir, "checkpoint.pt")
+                torch.save(checkpoint, save_file)
+                save_loss = os.path.join(save_dir, "train_losses.json")
+                with open(save_loss, "w") as l_file:
+                    json.dump(self.loss_trend, l_file, indent=4)
 
 
             # Dump model state after training
             if self.dump_file:
                 dump_all_modules_parameters(model, self.dump_file)
                 
-            # print("after training")
-            # for name, param in model.named_parameters():
-            #     print(f"Parameter Name: {name}")
-            #     print(f"Shape: {param.size()}")
-            #     print(f"Values:\n{param.data}")
-
 
     def test(self, model, dataloader, save_path):
 
         flush_step = 500
         batch_loss = 0
         device = self.parameters['device']
-        losses = self.parameters['losses']
-        loss_fn = losses['ChDL1']
+        loss_fn = model.test_loss
 
         model = model.to(device)
         model.eval()
 
-        with tqdm(total=len(dataloader)) as bbar:
+        print("\Test Loss Function:")
+        pprint(loss_fn)
+
+        with tqdm(total=len(dataloader), disable=self.debug) as bbar:
             for step, pcd in enumerate(dataloader):
 
                 partial, complete = pcd
@@ -222,11 +192,14 @@ class Trainer():
                     output = model(partial)
 
 
-                loss = loss_fn(output[-1], complete)
+                loss = loss_fn(output, complete)
                 batch_loss += loss.item()
+
+                if self.debug:  print(f"loss: {loss.item()}")
 
                 bbar.set_postfix(batch_loss=loss.item())
                 bbar.update(1)
+                self.logger.info(f"train loss: {loss.item()}")
 
                 # free up cuda mem
                 del complete
@@ -238,10 +211,13 @@ class Trainer():
                     torch.cuda.empty_cache()
                     gc.collect()
 
+                if self.debug: break
+
             self.test_loss = batch_loss/(step + 1)
 
-        save_dir = os.path.join(save_path, "evaluation/")
-        os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, "test_loss.txt"), "w") as file:
-            file.write(f"Test Loss: {str((self.test_loss))}")
+        if not self.debug:
+            save_dir = os.path.join(save_path, "evaluation/")
+            os.makedirs(save_dir, exist_ok=True)
+            with open(os.path.join(save_dir, "test_loss.txt"), "w") as file:
+                file.write(f"Test Loss: {str((self.test_loss))}")
             

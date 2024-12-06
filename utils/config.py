@@ -11,7 +11,6 @@ def dump_all_modules_parameters(model, dump_file):
             file.write(f"Values:\n{param.data}\n")
             file.write(f"\n")
         
-
 def count_trainable_parameters(params):
     return sum(p.numel() for p in params if p.requires_grad)
 

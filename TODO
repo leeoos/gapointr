@@ -7,11 +7,10 @@
 [ ] Implement early stopping
 [X] Collect train loss for plot
 [X] Save train configuration for each run 
-[ ] Load saved configuration in demonet
+[X] Load saved configuration in demonet
 [X] Set train and test data from config
 [X] Split trainer and main
 [ ] Demo configuration
 [ ] Standard training for 4 versions PoinTr + custom
-[ ] Load PoinTr pretrained or not 
+[X] Load PoinTr pretrained and not 
 [ ] Select model to test
-[ ] Make loss dict
