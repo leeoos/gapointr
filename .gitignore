@@ -177,3 +177,18 @@ Trust Tokens-journal
 User/
 languagepacks.json
 machineid
+
+Session Storage/
+CachedData/dc5a551c256719475d2d0959270e3836c9bbb632/chrome/
+blob_storage/
+Local Storage/
+GPUCache/
+Crashpad/
+Code Cache/
+DawnWebGPUCache/
+Service Worker/
+WebStorage/
+Dictionaries/
+Cache/
+DawnGraphiteCache/
+Shared Dictionary/
