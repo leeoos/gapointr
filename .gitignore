@@ -165,3 +165,15 @@ logs/
 saves/
 results/
 .legacy/
+
+# Sudo Codium
+CachedProfilesData/
+Network Persistent State
+Preferences
+SharedStorage
+TransportSecurity
+Trust Tokens
+Trust Tokens-journal
+User/
+languagepacks.json
+machineid

@@ -60,7 +60,7 @@ class FullyConnectedSteerableGeometricProductLayer(nn.Module):
         self.algebra = algebra
         self.features = features
 
-        self.normalization = NormalizationLayer(algebra, features) # to change
+        # self.normalization = NormalizationLayer(algebra, features) # to change
         self.q_prj = MVLinear(algebra, seq_lenght, seq_lenght)
         self.k_prj = MVLinear(algebra, seq_lenght, seq_lenght)
 
@@ -75,8 +75,8 @@ class FullyConnectedSteerableGeometricProductLayer(nn.Module):
         k = self.k_prj(input)
 
         # mv normalization
-        q = self.normalization(q)
-        k = self.normalization(k)
+        # q = self.normalization(q)
+        # k = self.normalization(k)
 
         # Dimention adjustments
         cayley = self.algebra.cayley.to(input.device) # [dim, dim, dim]

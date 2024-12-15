@@ -1,0 +1,1 @@
+docker exec -it pointr-ga:configured /bin/bash 

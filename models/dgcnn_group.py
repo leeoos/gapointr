@@ -4,8 +4,6 @@ from pointnet2_ops import pointnet2_utils
 # from knn_cuda import KNN
 # knn = KNN(k=16, transpose_mode=False)
 
-from .ga.MVFormer import TransformerEncoderGA
-
 
 def knn_point(nsample, xyz, new_xyz):
     """

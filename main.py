@@ -7,6 +7,7 @@ import logging
 from copy import deepcopy
 from easydict import EasyDict
 from torch.utils.data import DataLoader
+torch.manual_seed(42)
 
 # Optimizers
 from torch.optim import (
@@ -102,6 +103,12 @@ def main():
         builder.load_model(pointr, pointr_ckp)
         pointr = pointr.to(device)
 
+        # Load optimizer state
+        if config['load_optimizer']:
+            pointr_optimizer = AdamW(pointr.parameters())
+            raw_ckps = torch.load(pointr_ckp, weights_only=True)
+            pointr_optimizer.load_state_dict(raw_ckps['optimizer'])
+
     else:
         pointr_config = EasyDict(
             {
@@ -112,20 +119,10 @@ def main():
             }
         )
         pointr = PoinTr(pointr_config)
-
     model_info(pointr)
-    # model_info(pointr.increase_dim)
-    # model_info(pointr.reduce_map)
-    # model_info(pointr.foldingnet)
 
-    # HERE SELECT CUSTOM MODEL
     print(f"\nBuilding Custom model: {run_name}")
-    # model = PointCloudUpsamplerImproved(
-    #     pointr=pointr,
-    #     input_points=448,
-    #     output_points=2048
-    # )
-    model = PoinTrWrapper(pointr)
+    model = PoinTrWrapper(pointr=pointr, gafte=config['gafte'])
     model_info(model)
     # # Torch Info: pip install torchinfo --> commit new docker --> docker commit <container id> pointr-ga:configured
     # if config['debug']: 
@@ -142,7 +139,7 @@ def main():
                         config['optimizer'], 
                         availabel_optimizers,
                         {"params": model_parameters}
-                    ),
+                    ) if not config['load_optimizer'] else pointr_optimizer,
         'scheduler': None,
         'device': device,
     }
@@ -152,6 +149,8 @@ def main():
         BASE_DIR,
         config['save_path'], 
         config['pointr_config'],
+        "mvformer" if config['gafte'] else "",
+        "fine-tuning" if config['pretrained'] else "full"
     )
     run_counter = 0
     if not config['debug']: os.makedirs(save_dir, exist_ok=True)
@@ -172,13 +171,15 @@ def main():
         dump_dir = os.path.join(config['dump_dir'], run_name)
         os.makedirs(dump_dir, exist_ok=True)
         train_dump_file = os.path.join(dump_dir, "training_dump.txt")
+    else:
+        train_dump_file = None
 
     # Training / Testing Class
     trainer = training.Trainer(
         parameters=trainer_parameters,
         logger=logger,
         cfg=config,
-        dump_file=train_dump_file
+        dump_file=train_dump_file 
     )
 
     # Train
@@ -197,10 +198,12 @@ def main():
         checkpoint_file = f"{save_dir}/training/final/checkpoint.pt"
         checkpoint_file = os.path.join(BASE_DIR, '..', checkpoint_file)
         test_model = deepcopy(model)
-        checkpoint = torch.load(checkpoint_file, weights_only=True)
-        test_model.load_state_dict(checkpoint['model'], strict=True)
 
-        if config['dump_dir'] and config['train'] and config['debug']:
+        if not config['debug'] and config['load_ckp']:
+            checkpoint = torch.load(checkpoint_file, weights_only=True)
+            test_model.load_state_dict(checkpoint['model'], strict=True)
+
+        if config['dump_dir'] and config['train']:
             print("Checking for difference between saved weights and loaded weights!")
             print(dump_dir)
             test_dump_file = os.path.join(dump_dir, "test_dump.txt")
@@ -216,7 +219,6 @@ def main():
             dataloader=test_dataloader,
             save_path=save_dir
         )
-        print(f"Test loss: {trainer.test_loss:5f}")
 
 
 if __name__ == "__main__":

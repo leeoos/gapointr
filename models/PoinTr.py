@@ -6,7 +6,7 @@ from extensions.chamfer_dist import ChamferDistanceL1
 from .Transformer import PCTransformer
 from .build import MODELS
 
-from .ga.MVFormer import TransformerEncoderGA
+from .MVFormer import TransformerEncoderGA
 
 
 def fps(pc, num):

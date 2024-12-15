@@ -30,7 +30,6 @@ from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 # Models
 from models.PoinTr import PoinTr
 from models.PoinTrWrapper import PoinTrWrapper
-from models.ga.Upsampler import PointCloudUpsamplerImproved
 
 
 # Metrics
@@ -94,7 +93,7 @@ if __name__ == '__main__':
 
     # Get a single sample from test set for demonstartion
     random.seed(None) # reset seed to get random sample
-    pcd_index = random.randint(0, len(train_dataset))
+    pcd_index = random.randint(34394, len(train_dataset)) #cassettiera: 34394 aereo: 26383
     print(f"Selected sample: {pcd_index}")
     partial, complete = train_dataset[pcd_index]
 
@@ -160,14 +159,9 @@ if __name__ == '__main__':
         f"../saves/{config_type}/{version}/training/{step}/checkpoint.pt"
     )
     print(f"Loading checkpoints from: {checkpoint_file}")
-    # model = PointCloudUpsamplerImproved(
-    #     pointr=pointr,
-    #     input_points=448,
-    #     output_points=2048
-    # )
     model = PoinTrWrapper(pointr)
     checkpoint = torch.load(checkpoint_file, weights_only=True)
-    model.load_state_dict(checkpoint['model'], strict=True)
+    model.load_state_dict(checkpoint['model'], strict=False) # RUN YOU CLEVER BOY AND REMEMBER
     model = model.to(device)
     model_info(model)
     output = model(input_for_pointr)[-1]

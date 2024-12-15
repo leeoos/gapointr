@@ -1,9 +1,12 @@
 ### PoinTr
 pointr_config: PCN_models
-pretrained: False
+pretrained: true
+load_optimizer: false
 
 ### GAPoinTr
 version: ''
+load_ckp: true
+gafte: false
 
 ### Dataset
 train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
@@ -12,7 +15,7 @@ test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
 
 ### Training parameters
 batch_size: 32
-epochs: 10
+epochs: 1
 resume: false
 optimizer : {
   type: AdamW,
@@ -23,11 +26,11 @@ optimizer : {
 test_batch: 32
 
 ### Run parameters
-run_name: mv-loss-medium-weight-full
+run_name: pointr-ft-cdc-cdf-mvd
 train: true
 test: true
 debug: false
-overwrite_run: false
+overwrite_run: true
 progressive_saves: true
 save_step: 10000
 save_path: saves/
