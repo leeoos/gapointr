@@ -49,11 +49,14 @@ if __name__ == '__main__':
 
     # Get latest version
     version = config['run_name'] 
+    train_type = "fine-tuning" if config['pretrained'] else "full"
+    train_type = "mvformer" if config['gafte'] else train_type
     save_dir = os.path.join(
         BASE_DIR,
         '..',
         config['save_path'], 
         config['pointr_config'],
+        train_type,
     )
     run_counter = -1
     for file in os.listdir(save_dir):
@@ -152,11 +155,11 @@ if __name__ == '__main__':
     logger.info(f"images saved at: {output_dir}")
     print("done")
 
-    ### TEMPORARY PART ###
+    # Custom Model
     print(f"\nBuilding Custom model: {version}")
     checkpoint_file = os.path.join(
         BASE_DIR, 
-        f"../saves/{config_type}/{version}/training/{step}/checkpoint.pt"
+        f"../saves/{config_type}/{train_type}/{version}/training/{step}/checkpoint.pt"
     )
     print(f"Loading checkpoints from: {checkpoint_file}")
     model = PoinTrWrapper(pointr)

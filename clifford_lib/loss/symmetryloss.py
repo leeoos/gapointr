@@ -3,6 +3,7 @@ import sys
 import torch
 import torch.nn as nn
 
+
 # Setup base directory and add file to python path
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(BASE_DIR, '../../../'))
@@ -12,11 +13,12 @@ sys.path.append(os.path.join(BASE_DIR, '../'))
 # Clifford Algebra
 from clifford_lib.algebra.cliffordalgebra import CliffordAlgebra
 from utils.ga_utils import compute_volume_with_wedge
+from utils.knn_utils import knn_gather, knn_points
 
 # Chamfer distance 
 from extensions.chamfer_dist import ChamferDistanceL1
 
-class SymmetryPreservingLoss(nn.Module):
+class SymmetryLoss(nn.Module):
     def __init__(self, lambda_rot=1.0, lambda_ref=1.0, lambda_align=1.0, lambda_geo=1.0):
         """
         Initialize the Symmetry Preserving Loss Function.
@@ -27,7 +29,7 @@ class SymmetryPreservingLoss(nn.Module):
             lambda_align: Weight for alignment loss (e.g., Chamfer distance).
             lambda_geo: Weight for geometric consistency loss.
         """
-        super(SymmetryPreservingLoss, self).__init__()
+        super(SymmetryLoss, self).__init__()
         self.lambda_rot = lambda_rot
         self.lambda_ref = lambda_ref
         self.lambda_align = lambda_align
@@ -92,16 +94,17 @@ class SymmetryPreservingLoss(nn.Module):
             Alignment loss (Chamfer Distance).
         """
         # Compute pairwise distances
-        input_distances = torch.cdist(source_points, target_points, p=2)  # Shape (B, N, M)
-        # or 
-        # cdl1 = ChamferDistanceL1()
-        # input_distances = cdl1(source_points, target_points)
+        # input_distances = torch.cdist(source_points, target_points, p=2)  # Shape (B, N, M)
         
         # Chamfer distance
-        min_dist_input = torch.min(input_distances, dim=-1)[0]  # Minimum for each input point
-        min_dist_recon = torch.min(input_distances, dim=-2)[0]  # Minimum for each recon point
-        loss_align = torch.mean(min_dist_input) + torch.mean(min_dist_recon)
-        return loss_align
+        # min_dist_input = torch.min(input_distances, dim=-1)[0]  # Minimum for each input point
+        # min_dist_recon = torch.min(input_distances, dim=-2)[0]  # Minimum for each recon point
+        # loss_align = torch.mean(min_dist_input) + torch.mean(min_dist_recon)
+        # return loss_align
+    
+        # or 
+        cdl1 = ChamferDistanceL1()
+        return cdl1(source_points, target_points)
     
     def compute_geometric_consistency_loss(self, source_points, target_points):
         """
@@ -123,7 +126,7 @@ class SymmetryPreservingLoss(nn.Module):
 
 
 
-    def forward(self, source_points, target_points, axis, plane_normal):
+    def forward(self, source_points: torch.Tensor, target_points: torch.Tensor, device='cuda'):
         """
         Compute the total symmetry-preserving loss.
         
@@ -136,17 +139,46 @@ class SymmetryPreservingLoss(nn.Module):
         Returns:
             Total symmetry-preserving loss.
         """
+
+        # Initialize plane and reference axis
+        batchsize_source, lengths_source, dim_source = source_points[1].shape
+        batchsize_target, lengths_target, dim_target = target_points.shape
+        axis = torch.tensor([[0., 0., 1.]], requires_grad=True).repeat(batchsize_source, 1).to(device)
+        plane_normal = torch.tensor([[0., 1., 0.]], requires_grad=True).repeat(batchsize_source, 1).to(device)
+
+
+        # KNN computation
+        lengths_source = (
+            torch.ones(batchsize_source, dtype=torch.long, device=source_points[1].device)
+            * lengths_source
+        )
+        lengths_target = (
+            torch.ones(batchsize_target, dtype=torch.long, device=target_points.device)
+            * lengths_target
+        )
+        source_nn = knn_points(
+            source_points[1],
+            target_points,
+            lengths1=lengths_source,
+            lengths2=lengths_target,
+            K=1,
+        )
+        new_target_points = knn_gather(target_points, idx=source_nn.idx, lengths=lengths_target).squeeze(-2)
+        
+
         # Compute individual losses
-        loss_rot = self.compute_rotational_symmetry_loss(source_points, target_points, axis)
-        loss_ref = self.compute_reflectional_symmetry_loss(source_points, target_points, plane_normal)
-        loss_align = self.compute_alignment_loss(source_points, target_points)
-        loss_geo = self.compute_geometric_consistency_loss(source_points, target_points)
+        loss_align_coarse = self.compute_alignment_loss(source_points[0], target_points)
+        loss_align_fine = self.compute_alignment_loss(source_points[1], target_points)
+        loss_rot = self.compute_rotational_symmetry_loss(source_points[1], new_target_points, axis)
+        loss_ref = self.compute_reflectional_symmetry_loss(source_points[1], new_target_points, plane_normal)
+        loss_geo = self.compute_geometric_consistency_loss(source_points[1], new_target_points)
         
         # Combine losses
         total_loss = (
             self.lambda_rot * loss_rot +
             self.lambda_ref * loss_ref +
-            self.lambda_align * loss_align +
+            self.lambda_align * loss_align_coarse +
+            self.lambda_align * loss_align_fine +
             self.lambda_geo * loss_geo
         )
         return total_loss
@@ -154,7 +186,7 @@ class SymmetryPreservingLoss(nn.Module):
 
 
 if __name__ == "__main__":
-    loss_fn = SymmetryPreservingLoss(lambda_rot=1.0, lambda_ref=1.0, lambda_align=1.0, lambda_geo=1.0)
+    loss_fn = SymmetryLoss(lambda_rot=1.0, lambda_ref=1.0, lambda_align=1.0, lambda_geo=1.0)
 
     batch_size = 32
     num_points = 2048

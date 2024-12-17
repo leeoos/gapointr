@@ -16,6 +16,7 @@ from extensions.chamfer_dist import (
 )
 
 from clifford_lib.loss.multivectordistance import MVDistance
+from clifford_lib.loss.symmetryloss import SymmetryLoss
 from .MVFormer import TransformerEncoderGA
 
 class PoinTrWrapper(nn.Module):
@@ -41,6 +42,7 @@ class PoinTrWrapper(nn.Module):
         # Loss definition
         self.multivector_distance = MVDistance()
         self.chamfer_distance_l1 = ChamferDistanceL1()
+        self.symmetry = SymmetryLoss()
 
         # Classic loss
         self.coarse_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) 
@@ -51,10 +53,17 @@ class PoinTrWrapper(nn.Module):
         self.mvd_loss = lambda x,y: self.multivector_distance(x[0], y)
         self.mvd_reg_loss = lambda x,y: self.multivector_distance(x[0], y) + self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y)
 
+        # Symmetry loss
+        self.symmetry_loss = lambda x,y: self.symmetry_loss_explicit(x, y)
+
         # Select loss
         self.test_loss = lambda x,y: self.chamfer_distance_l1(x[1], y)
-        self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) + self.multivector_distance(x[0], y)
+        # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) + self.multivector_distance(x[0], y)
         # self.train_loss = self.pointr_loss
+        self.train_loss = self.symmetry_loss
+
+    def symmetry_loss_explicit(self, input, target):
+        return self.symmetry(input, target)
 
     def forward(self, input):
         if self.gafte:
