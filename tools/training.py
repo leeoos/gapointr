@@ -27,10 +27,10 @@ from utils.config import (
     get_instance, 
     dump_all_modules_parameters
 )
-from extensions.chamfer_dist import (
-    ChamferDistanceL1, 
-    ChamferDistanceL2
-)
+
+# Metrics
+from utils.metrics import Metrics
+from utils.dist_utils import fps
 from pointnet2_ops import pointnet2_utils
 
 # # MVP Dataset  
@@ -45,16 +45,21 @@ class Trainer():
     def __init__(self, parameters, logger, cfg, dump_file='' ) -> None:
 
         self.debug = cfg['debug']
+        self.resume = cfg['resume']
+        self.b_size = cfg['batch_size']
         self.run_name = cfg['run_name']
         self.save_step = cfg['save_step']
         self.pretrained = cfg['pretrained']
+        self.resume_step = cfg['resume_step']
         self.progressive = cfg['progressive_saves']
+        self.accumulation_step = cfg['accumulation_step']
 
         self.parameters = parameters
         self.dump_file = dump_file
         self.logger = logger
 
         self.total_epochs = 0
+        self.total_steps = 0
         self.loss_trend = {}
         self.test_loss = 0 
 
@@ -77,12 +82,21 @@ class Trainer():
         print(f"Train Loss Function: {train_loss_signature}")
         print("Optimizer:")
         pprint(optimizer)
+
+        if self.resume and self.total_steps < self.resume_step:
+            print(f"Skipping the first {self.resume_step}")
+            self.logger.info(f"Skipping the first {self.resume_step}")
     
         with tqdm(total=train_epochs, leave=True, disable=self.debug) as pbar:
             for epoch in range(train_epochs):
                 epoch_loss = 0
                 with tqdm(total=len(dataloader), leave=False, disable=self.debug) as bbar:
                     for step, pcd in enumerate(dataloader):
+                        
+                        if self.resume and  self.total_steps < self.resume_step:
+                            self.total_steps += 1
+                            bbar.update(1)
+                            continue
 
                         # Get samples and reset optimizer
                         partial, complete = pcd
@@ -95,14 +109,22 @@ class Trainer():
 
                         # Backward step
                         loss = loss_fn(output, complete)
+                        loss = loss / self.accumulation_step
                         loss.backward()
-                        optimizer.step()
+
+                        # Wait for several backward steps for gradient accumulation
+                        if (step + 1) % self.accumulation_step == 0: 
+                            optimizer.step()                            
+                            model.zero_grad() 
+                            optimizer.zero_grad()
+
                         epoch_loss += loss.item()
+                        # optimizer.step()
 
                         if self.debug: print(f"loss: {loss.item()}")
                         bbar.set_postfix(batch_loss=loss.item())
                         bbar.update(1)
-                        self.logger.info(f"batch loss: {loss.item()}\tepoch: {(epoch + 1) // (step + 1)}")
+                        self.logger.info(f"batch loss: {loss.item()}\tepoch: {step/len(dataloader)}")
 
                         # Collect epoch losses for statistic
                         epoch_key = "epoch" + "_" + str(epoch+1)
@@ -112,7 +134,7 @@ class Trainer():
                             self.loss_trend[epoch_key].append(loss.item())
 
                         # Save and flush
-                        if step > 0 and step % self.save_step == 0 and\
+                        if self.total_steps > 0 and self.total_steps % self.save_step == 0 and\
                             self.progressive and not self.debug:
                                 checkpoint = { 
                                     'epoch': epoch,
@@ -120,7 +142,7 @@ class Trainer():
                                     'optimizer': optimizer.state_dict(),
                                 }
                                 save_dir=  os.path.join(
-                                    save_path, f"training/{str(step*(epoch+1))}"
+                                    save_path, f"training/{str(self.total_steps)}"
                                 )
                                 os.makedirs(save_dir, exist_ok=True)
                                 save_file = os.path.join(save_dir, "checkpoint.pt")
@@ -139,6 +161,7 @@ class Trainer():
                             torch.cuda.empty_cache()
                             gc.collect()
 
+                        self.total_steps += 1
                         if self.debug: break
 
                 if scheduler: scheduler.step()
@@ -156,7 +179,7 @@ class Trainer():
                     'optimizer': optimizer.state_dict(),
                 }
                 save_dir=  os.path.join(
-                    save_path, "training/final"
+                    save_path, f"training/{self.total_steps}"
                 )
                 os.makedirs(save_dir, exist_ok=True)
                 save_file = os.path.join(save_dir, "checkpoint.pt")
@@ -188,6 +211,11 @@ class Trainer():
         test_loss_signature = inspect.getsource(loss_fn)
         test_loss_signature = test_loss_signature.split('=')[1].strip()
         print(f"Test Loss Function: {test_loss_signature}")
+
+        evaluation_results = {}
+        results_file_name = "results.json" if self.pretrained else "full_results.json"
+        results_file = os.path.join(BASE_DIR, "..", f"results/metrics/{results_file_name}")
+        os.makedirs(os.path.dirname(results_file), exist_ok=True)
         
         with tqdm(total=len(dataloader), disable=self.debug) as bbar:
             for step, pcd in enumerate(dataloader):
@@ -205,6 +233,8 @@ class Trainer():
                 loss = loss_fn(output, complete)
                 batch_loss += loss.item()
 
+                self.evaluation(output[-1], complete, evaluation_results)
+
                 bbar.set_postfix(batch_loss=loss.item())
                 bbar.update(1)
                 self.logger.info(f"test loss: {loss.item()}")
@@ -213,18 +243,39 @@ class Trainer():
                 del complete
                 del partial
                 del output
-                del loss
+                # del loss
                 if step > 0 and step % flush_step == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
                     gc.collect()
 
                 if self.debug: break
-
-            self.test_loss = batch_loss/(step + 1)
-        print(f"Test loss: {self.test_loss:5f}\n")
+                # if step == 5: break
+        
+        results_dic = {}
+        try:
+            with open(results_file, "r") as rfile:
+                results_dic = json.load(rfile)
+        except:
+            results_dic = {}
+        if self.run_name not in results_dic.keys(): results_dic[self.run_name] = {}
+                
+        # Print test results     
+        print("\nEvaluation")
+        self.test_loss = batch_loss/(step + 1)
+        print(f"Test loss: {self.test_loss:5f}")
+        for key in evaluation_results.keys():
+            evaluation_results[key] /= (step + 1)
+            print(f"{key}: {evaluation_results[key]:5f}")
+            results_dic[self.run_name][key] = evaluation_results[key]
 
         if not self.debug:
+            print("\nSaving results...")
+            print(f"Global file for results summary: {results_file}")
+            self.logger.info(f"Global file for results summary: {results_file}")
+            with open(results_file, "w") as rout:
+                json.dump(results_dic, rout, indent=4)
+        
             save_dir = os.path.join(save_path, "evaluation/")
             os.makedirs(save_dir, exist_ok=True)
             if self.total_epochs > 0: 
@@ -232,18 +283,47 @@ class Trainer():
                     file.write(f"Run name: {self.run_name}\n")
                     file.write(f"Using pretrained: {self.pretrained}\n")
                     file.write(f"Training epochs: {self.total_epochs}\n")
+                    file.write(f"Training batch size: {self.b_size}\n")
                     file.write(f"Optimizer: {self.parameters.get('optimizer', None)}\n")
                     file.write(f"Train Loss Function: {train_loss_signature}\n")
                     file.write(f"Test Loss Function: {test_loss_signature}\n")
-                    file.write(f"Test Loss: {str((self.test_loss))}")
-
+                    file.write(f"Test Loss: {str((self.test_loss))}\n")
+                    for index, items in enumerate(evaluation_results.items()):
+                        key, value = items
+                        file.write(f"{key}: {value}")
+                        if (index < len(evaluation_results) - 1): file.write('\n')
             else:
-                with open(os.path.join(save_dir, "run_info.txt"), "r+") as file:
-                    lines = file.readlines()
-                    lines = lines[:-2]
-                    file.seek(0)
-                    file.writelines(lines)
-                    file.write(f"Test Loss Function: {test_loss_signature}\n")
-                    file.write(f"Test Loss: {str((self.test_loss))}")
+                try:
+                    with open(os.path.join(save_dir, "run_info.txt"), "r+") as file:
+                        lines = file.readlines()
+                        lines = lines[:-(len(evaluation_results)+2)]
+                        file.seek(0)
+                        file.writelines(lines)
+                        file.write(f"Test Loss Function: {test_loss_signature}\n")
+                        file.write(f"Test Loss: {str((self.test_loss))}\n")
+                        for index, items in enumerate(evaluation_results.items()):
+                            key, value = items
+                            file.write(f"{key}: {value}")
+                            if (index < len(evaluation_results) - 1): file.write('\n')
+                except:
+                    with open(os.path.join(save_dir, "run_info.txt"), "w") as file:
+                        file.write(f"Run name: {self.run_name}\n")
+                        file.write(f"Test Loss Function: {test_loss_signature}\n")
+                        file.write(f"Test Loss: {str((self.test_loss))}\n")
+                        for index, items in enumerate(evaluation_results.items()):
+                            key, value = items
+                            file.write(f"{key}: {value}")
+                            if (index < len(evaluation_results) - 1): file.write('\n')
 
-            
+        print("done!")
+
+    def evaluation(self, prediction, target, evaluation_results):
+        to_test = fps(prediction.detach(), num=2048)
+        metrics = Metrics.get(to_test.detach(), target, require_emd=True)
+        metric_names = Metrics.names()
+        for name, value in zip(metric_names, metrics):
+            evaluation_results.setdefault(name, 0)
+            evaluation_results[name] += value.item()
+
+
+

@@ -46,96 +46,8 @@ def fast_einsum(q_einsum, cayley, k_einsum):
 import torch
 from torch.nn.functional import mse_loss
 
-class MVDistance(torch.nn.Module):
-    def __init__(self, metric=[1, 1, 1]):
-        super(MVDistance, self).__init__()
-        self.ca = CliffordAlgebra(metric)
-
-    def forward(
-        self,
-        source_cloud: torch.Tensor,
-        target_cloud: torch.Tensor,
-        bidirectional: Optional[bool] = False,
-        batch_reduction: Optional[str] = "mean",
-        point_reduction: Optional[str] = "sum",
-    ):
-        # Validate inputs
-        batchsize_source, lengths_source, dim_source = source_cloud.shape
-        batchsize_target, lengths_target, dim_target = target_cloud.shape
-
-        if dim_source != dim_target:
-            raise ValueError("Source and target point clouds must have the same dimensionality.")
-        if batchsize_source != batchsize_target:
-            raise ValueError("Source and target point clouds must have the same batch size.")
-        
-
-        # KNN computation
-        lengths_source = (
-            torch.ones(batchsize_source, dtype=torch.long, device=source_cloud.device)
-            * lengths_source
-        )
-        lengths_target = (
-            torch.ones(batchsize_target, dtype=torch.long, device=target_cloud.device)
-            * lengths_target
-        )
-        source_nn = knn_points(
-            source_cloud,
-            target_cloud,
-            lengths1=lengths_source,
-            lengths2=lengths_target,
-            K=1,
-        )
-        p_nn = knn_gather(target_cloud, idx=source_nn.idx, lengths=lengths_target).squeeze(-2)
-        
-        # Compute geometric embeddings
-        mv_source = self.ca.embed_grade(source_cloud, 1).contiguous()
-        mv_target = self.ca.embed_grade(p_nn, 1).contiguous()
-
-        # Compute blade norms
-        norm_source = torch.sqrt(torch.sum(mv_source * mv_source, dim=-1))  # Blade norm for source
-        norm_target = torch.sqrt(torch.sum(mv_target * mv_target, dim=-1))  # Blade norm for target
-
-        # Pairwise norm differences
-        norm_diff = (norm_source.unsqueeze(2) - norm_target.unsqueeze(1)) ** 2  # Shape: (B, N, M)
-
-        # Symmetric loss (bidirectional)
-        if bidirectional:
-            reverse_diff = (norm_target.unsqueeze(2) - norm_source.unsqueeze(1)) ** 2
-            norm_diff += reverse_diff
-
-        # Pointwise reduction
-        if point_reduction == "mean":
-            point_loss = norm_diff.mean(dim=[1, 2])  # Average over points in both clouds
-        elif point_reduction == "sum":
-            point_loss = norm_diff.sum(dim=[1, 2])  # Sum over points in both clouds
-        else:
-            point_loss = norm_diff  # No reduction
-
-        # Batch reduction
-        if batch_reduction == "mean":
-            loss = point_loss.mean()
-        elif batch_reduction == "sum":
-            loss = point_loss.sum()
-        else:
-            loss = point_loss  # No reduction
-
-        # Geometric correlation as a secondary loss
-        inner_product = torch.sum(mv_source.unsqueeze(2) * mv_target.unsqueeze(1), dim=-1)  # Inner product
-        cosine_similarity = inner_product / (
-            torch.sqrt(torch.sum(mv_source ** 2, dim=-1).unsqueeze(2)) *
-            torch.sqrt(torch.sum(mv_target ** 2, dim=-1).unsqueeze(1)) + 1e-8
-        )
-        correlation_loss = 1 - cosine_similarity.mean(dim=[1, 2])  # Mean correlation
-
-        # Combine losses
-        total_loss = loss + correlation_loss.mean()
-
-        return total_loss
-
-
-
 # class MVDistance(torch.nn.Module):
-#     def __init__(self, metric=[1,1,1]):
+#     def __init__(self, metric=[1, 1, 1]):
 #         super(MVDistance, self).__init__()
 #         self.ca = CliffordAlgebra(metric)
 
@@ -144,28 +56,20 @@ class MVDistance(torch.nn.Module):
 #         source_cloud: torch.Tensor,
 #         target_cloud: torch.Tensor,
 #         bidirectional: Optional[bool] = False,
-#         reverse: Optional[bool] = False,
 #         batch_reduction: Optional[str] = "mean",
 #         point_reduction: Optional[str] = "sum",
 #     ):
-
-#         if not isinstance(source_cloud, torch.Tensor):
-#             raise TypeError(
-#                 "Expected input type torch.Tensor. Got {} instead".format(type(source_cloud))
-#             )
-#         if not isinstance(target_cloud, torch.Tensor):
-#             raise TypeError(
-#                 "Expected input type torch.Tensor. Got {} instead".format(type(target_cloud))
-#             )
-#         if source_cloud.device != target_cloud.device:
-#             raise ValueError(
-#                 "Source and target clouds must be on the same device. "
-#                 f"Got {source_cloud.device} and {target_cloud.device}."
-#             )
-
+#         # Validate inputs
 #         batchsize_source, lengths_source, dim_source = source_cloud.shape
 #         batchsize_target, lengths_target, dim_target = target_cloud.shape
 
+#         if dim_source != dim_target:
+#             raise ValueError("Source and target point clouds must have the same dimensionality.")
+#         if batchsize_source != batchsize_target:
+#             raise ValueError("Source and target point clouds must have the same batch size.")
+        
+
+#         # KNN computation
 #         lengths_source = (
 #             torch.ones(batchsize_source, dtype=torch.long, device=source_cloud.device)
 #             * lengths_source
@@ -174,27 +78,6 @@ class MVDistance(torch.nn.Module):
 #             torch.ones(batchsize_target, dtype=torch.long, device=target_cloud.device)
 #             * lengths_target
 #         )
-
-#         chamfer_dist = None
-
-#         if batchsize_source != batchsize_target:
-#             raise ValueError(
-#                 "Source and target pointclouds must have the same batchsize."
-#             )
-#         if dim_source != dim_target:
-#             raise ValueError(
-#                 "Source and target pointclouds must have the same dimensionality."
-#             )
-#         if bidirectional and reverse:
-#             warnings.warn(
-#                 "Both bidirectional and reverse set to True. "
-#                 "bidirectional behavior takes precedence."
-#             )
-#         if point_reduction != "sum" and point_reduction != "mean" and point_reduction != None:
-#             raise ValueError('Point reduction must either be "sum" or "mean" or None.')
-#         if batch_reduction != "sum" and batch_reduction != "mean" and batch_reduction != None:
-#             raise ValueError('Batch reduction must either be "sum" or "mean" or None.')
-
 #         source_nn = knn_points(
 #             source_cloud,
 #             target_cloud,
@@ -202,111 +85,182 @@ class MVDistance(torch.nn.Module):
 #             lengths2=lengths_target,
 #             K=1,
 #         )
-
-#         # print(source_nn.idx)
-#         # print(source_nn.idx.shape)
 #         p_nn = knn_gather(target_cloud, idx=source_nn.idx, lengths=lengths_target).squeeze(-2)
-#         # print(p_nn)
-#         # print(p_nn.shape)
-#         # mv computation
-#         cayley = self.ca.cayley.to('cuda')
-#         mv_output = self.ca.embed_grade(source_cloud, 1)
-#         mv_target = self.ca.embed_grade(p_nn, 1)
-
-#         # print(mv_output.shape)
-#         # print(mv_target.shape)
-
-#         # Memory optimization
-#         # Make tensor contigous in memory for performance optimization
-#         mv_output = mv_output.contiguous()
-#         mv_target = mv_target.contiguous()
-#         cayley = cayley.contiguous()
-
-#         # Half precision for performance optimization
-#         mv_output = mv_output.half()
-#         mv_target = mv_target.half()
-#         cayley = cayley.half()
-
-#         mv_output_matrix = fast_einsum(mv_output.unsqueeze(1), cayley, mv_output.unsqueeze(2))
-#         mv_target_matrix = fast_einsum(mv_target.unsqueeze(1), cayley, mv_target.unsqueeze(2))
-
-#         # print(f"Output multivectors pairs: {mv_output_matrix}\n")
-#         # print(f"Target multivectors pairs: {mv_target_matrix}\n")
-
-#         # Ensure tensors are of the same shape
-#         # assert mv_target_matrix.shape == mv_output_matrix.shape, "Input tensors must have the same shape."
         
-#         # # Compute the difference between the tensors
-#         # diff = mv_target_matrix - mv_output_matrix  # Shape: (b, n, n, k)
+#         # Compute geometric embeddings
+#         mv_source = self.ca.embed_grade(source_cloud, 1).contiguous()
+#         mv_target = self.ca.embed_grade(p_nn, 1).contiguous()
+
+#         # Compute blade norms
+#         norm_source = torch.sqrt(torch.sum(mv_source * mv_source, dim=-1))  # Blade norm for source
+#         norm_target = torch.sqrt(torch.sum(mv_target * mv_target, dim=-1))  # Blade norm for target
+
+#         # Pairwise norm differences
+#         norm_diff = (norm_source.unsqueeze(2) - norm_target.unsqueeze(1)) ** 2  # Shape: (B, N, M)
+
+#         # Symmetric loss (bidirectional)
+#         if bidirectional:
+#             reverse_diff = (norm_target.unsqueeze(2) - norm_source.unsqueeze(1)) ** 2
+#             norm_diff += reverse_diff
+
+#         # Pointwise reduction
+#         if point_reduction == "mean":
+#             point_loss = norm_diff.mean(dim=[1, 2])  # Average over points in both clouds
+#         elif point_reduction == "sum":
+#             point_loss = norm_diff.sum(dim=[1, 2])  # Sum over points in both clouds
+#         else:
+#             point_loss = norm_diff  # No reduction
+
+#         # Batch reduction
+#         if batch_reduction == "mean":
+#             loss = point_loss.mean()
+#         elif batch_reduction == "sum":
+#             loss = point_loss.sum()
+#         else:
+#             loss = point_loss  # No reduction
+
+#         # Geometric correlation as a secondary loss
+#         inner_product = torch.sum(mv_source.unsqueeze(2) * mv_target.unsqueeze(1), dim=-1)  # Inner product
+#         cosine_similarity = inner_product / (
+#             torch.sqrt(torch.sum(mv_source ** 2, dim=-1).unsqueeze(2)) *
+#             torch.sqrt(torch.sum(mv_target ** 2, dim=-1).unsqueeze(1)) + 1e-8
+#         )
+#         correlation_loss = 1 - cosine_similarity.mean(dim=[1, 2])  # Mean correlation
+
+#         # Combine losses
+#         total_loss = loss + correlation_loss.mean()
+
+#         return total_loss
+
+
+
+class MVDistance(torch.nn.Module):
+    def __init__(self, metric=[1,1,1]):
+        super(MVDistance, self).__init__()
+        self.ca = CliffordAlgebra(metric)
+
+    def forward(
+        self,
+        source_cloud: torch.Tensor,
+        target_cloud: torch.Tensor,
+        bidirectional: Optional[bool] = False,
+        reverse: Optional[bool] = False,
+        batch_reduction: Optional[str] = "mean",
+        point_reduction: Optional[str] = "sum",
+    ):
+
+        if not isinstance(source_cloud, torch.Tensor):
+            raise TypeError(
+                "Expected input type torch.Tensor. Got {} instead".format(type(source_cloud))
+            )
+        if not isinstance(target_cloud, torch.Tensor):
+            raise TypeError(
+                "Expected input type torch.Tensor. Got {} instead".format(type(target_cloud))
+            )
+        if source_cloud.device != target_cloud.device:
+            raise ValueError(
+                "Source and target clouds must be on the same device. "
+                f"Got {source_cloud.device} and {target_cloud.device}."
+            )
+
+        batchsize_source, lengths_source, dim_source = source_cloud.shape
+        batchsize_target, lengths_target, dim_target = target_cloud.shape
+
+        lengths_source = (
+            torch.ones(batchsize_source, dtype=torch.long, device=source_cloud.device)
+            * lengths_source
+        )
+        lengths_target = (
+            torch.ones(batchsize_target, dtype=torch.long, device=target_cloud.device)
+            * lengths_target
+        )
+
+        chamfer_dist = None
+
+        if batchsize_source != batchsize_target:
+            raise ValueError(
+                "Source and target pointclouds must have the same batchsize."
+            )
+        if dim_source != dim_target:
+            raise ValueError(
+                "Source and target pointclouds must have the same dimensionality."
+            )
+        if bidirectional and reverse:
+            warnings.warn(
+                "Both bidirectional and reverse set to True. "
+                "bidirectional behavior takes precedence."
+            )
+        if point_reduction != "sum" and point_reduction != "mean" and point_reduction != None:
+            raise ValueError('Point reduction must either be "sum" or "mean" or None.')
+        if batch_reduction != "sum" and batch_reduction != "mean" and batch_reduction != None:
+            raise ValueError('Batch reduction must either be "sum" or "mean" or None.')
+
+        source_nn = knn_points(
+            source_cloud,
+            target_cloud,
+            lengths1=lengths_source,
+            lengths2=lengths_target,
+            K=1,
+        )
+
+        # print(source_nn.idx)
+        # print(source_nn.idx.shape)
+        p_nn = knn_gather(target_cloud, idx=source_nn.idx, lengths=lengths_target).squeeze(-2)
+        # print(p_nn)
+        # print(p_nn.shape)
+        # mv computation
+        cayley = self.ca.cayley.to('cuda')
+        mv_output = self.ca.embed_grade(source_cloud, 1)
+        mv_target = self.ca.embed_grade(p_nn, 1)
+
+        # print(mv_output.shape)
+        # print(mv_target.shape)
+
+        # Memory optimization
+        # Make tensor contigous in memory for performance optimization
+        mv_output = mv_output.contiguous()
+        mv_target = mv_target.contiguous()
+        cayley = cayley.contiguous()
+
+        # Half precision for performance optimization
+        mv_output = mv_output.half()
+        mv_target = mv_target.half()
+        cayley = cayley.half()
+
+        mv_output_matrix = fast_einsum(mv_output.unsqueeze(1), cayley, mv_output.unsqueeze(2))
+        mv_target_matrix = fast_einsum(mv_target.unsqueeze(1), cayley, mv_target.unsqueeze(2))
+
+        # print(f"Output multivectors pairs: {mv_output_matrix}\n")
+        # print(f"Target multivectors pairs: {mv_target_matrix}\n")
+
+        # Ensure tensors are of the same shape
+        # assert mv_target_matrix.shape == mv_output_matrix.shape, "Input tensors must have the same shape."
         
-#         # # Square the differences and sum along the last dimension (k)
-#         # squared_diff = diff ** 2  # Shape: (b, n, n, k)
-#         # summed_diff = torch.sum(squared_diff, dim=-1)  # Shape: (b, n, n)
+        # # Compute the difference between the tensors
+        # diff = mv_target_matrix - mv_output_matrix  # Shape: (b, n, n, k)
         
-#         # # Take the square root to get the L2 distance
-#         # distances = torch.sqrt(summed_diff)  # Shape: (b, n, n)
+        # # Square the differences and sum along the last dimension (k)
+        # squared_diff = diff ** 2  # Shape: (b, n, n, k)
+        # summed_diff = torch.sum(squared_diff, dim=-1)  # Shape: (b, n, n)
+        
+        # # Take the square root to get the L2 distance
+        # distances = torch.sqrt(summed_diff)  # Shape: (b, n, n)
 
-#         # # print(distances)
-#         # # print(distances.shape)
+        # # print(distances)
+        # # print(distances.shape)
 
-#         # mean_distances = torch.mean(distances, dim=-1)
-#         # torch.mean(mean_distances, dim=-1)
+        # mean_distances = torch.mean(distances, dim=-1)
+        # torch.mean(mean_distances, dim=-1)
 
-#         # Compute the squared difference
-#         squared_difference = (mv_output_matrix - mv_target_matrix) ** 2
+        # Compute the squared difference
+        squared_difference = (mv_output_matrix - mv_target_matrix) ** 2
 
-#         # Compute the mean over all elements
-#         mse_loss = torch.mean(squared_difference)
-#         # mse_loss = squared_difference.sum() / squared_difference.numel()
+        # Compute the mean over all elements
+        mse_loss = torch.mean(squared_difference)
+        # mse_loss = squared_difference.sum() / squared_difference.numel()
 
-#         # print(mean_distances.shape)
-#         return mse_loss
-
-
-#         # print(f"loss: {mean_distances}")
-#         # print(mean_distances.shape)
-
-#         # target_nn = None
-#         # if reverse or bidirectional:
-#         #     target_nn = knn_points(
-#         #         target_cloud,
-#         #         source_cloud,
-#         #         lengths1=lengths_target,
-#         #         lengths2=lengths_source,
-#         #         K=1,
-#         #     )
-
-#         # # Forward Chamfer distance (batchsize_source, lengths_source)
-#         # chamfer_forward = source_nn.dists[..., 0]
-#         # chamfer_backward = None
-#         # if reverse or bidirectional:
-#         #     # Backward Chamfer distance (batchsize_source, lengths_source)
-#         #     chamfer_backward = target_nn.dists[..., 0]
-
-#         # if point_reduction == "sum":
-#         #     chamfer_forward = chamfer_forward.sum(1)  # (batchsize_source,)
-#         #     if reverse or bidirectional:
-#         #         chamfer_backward = chamfer_backward.sum(1)  # (batchsize_target,)
-#         # elif point_reduction == "mean":
-#         #     chamfer_forward = chamfer_forward.mean(1)  # (batchsize_source,)
-#         #     if reverse or bidirectional:
-#         #         chamfer_backward = chamfer_backward.mean(1)  # (batchsize_target,)
-
-#         # if batch_reduction == "sum":
-#         #     chamfer_forward = chamfer_forward.sum()  # (1,)
-#         #     if reverse or bidirectional:
-#         #         chamfer_backward = chamfer_backward.sum()  # (1,)
-#         # elif batch_reduction == "mean":
-#         #     chamfer_forward = chamfer_forward.mean()  # (1,)
-#         #     if reverse or bidirectional:
-#         #         chamfer_backward = chamfer_backward.mean()  # (1,)
-
-#         # if bidirectional:
-#         #     return chamfer_forward + chamfer_backward
-#         # if reverse:
-#         #     return chamfer_backward
-
-#         # return chamfer_forward
+        # print(mean_distances.shape)
+        return mse_loss
 
 
 class _knn_points(Function):

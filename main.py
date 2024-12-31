@@ -81,7 +81,7 @@ def main():
     # Build MVP dataset for testing
     test_data_path = config['test_dataset'] 
     load_test_dataset = h5py.File(test_data_path, 'r')
-    test_dataset = MVPDataset(load_test_dataset, transform_for='test', logger=logger)
+    test_dataset = MVPDataset(load_test_dataset, transform_for='train', logger=logger)
     logger.info(f"lenght of test dataset: {len(test_dataset)}")
 
     # Make dataloader
@@ -90,6 +90,31 @@ def main():
     print(f"Number of training batches: {len(train_dataloader)}")
     test_dataloader = DataLoader(test_dataset, batch_size=config['test_batch'])
     print("done")
+
+    # Set up saving directory
+    save_dir = os.path.join(
+        BASE_DIR,
+        config['save_path'], 
+        config['pointr_config'],
+        "fine-tuning" if config['pretrained'] else "full"
+    )
+    run_counter = 0
+    if not config['debug']: os.makedirs(save_dir, exist_ok=True)
+    for file in os.listdir(save_dir):
+        if run_name.split('_') == file.split('_')[:-1]: 
+            run_counter += 1
+    if (config['overwrite_run'] or config['resume']) and run_counter >= 1: 
+        run_counter -= 1
+    # Use predefined version if specified
+    run_counter = config['version_number'] if isinstance(config['version_number'], int) else run_counter
+    run_name += "_" + str(run_counter)
+    config['run_name'] = run_name
+    save_dir = os.path.join(save_dir, run_name)
+    print(f"\nSaving point: {save_dir}")
+    logger.info(f"\nSaving point: {save_dir}")
+
+    # Preloaded optimizer initialization
+    selected_optimizer = None
 
     # Define PoinTr instance
     print("\nBuilding PoinTr...")
@@ -105,9 +130,9 @@ def main():
 
         # Load optimizer state
         if config['load_optimizer']:
-            pointr_optimizer = AdamW(pointr.parameters())
+            selected_optimizer = AdamW(pointr.parameters())
             raw_ckps = torch.load(pointr_ckp, weights_only=True)
-            pointr_optimizer.load_state_dict(raw_ckps['optimizer'])
+            selected_optimizer.load_state_dict(raw_ckps['optimizer'])
 
     else:
         pointr_config = EasyDict(
@@ -122,7 +147,7 @@ def main():
     model_info(pointr)
 
     print(f"\nBuilding Custom model: {run_name}")
-    model = PoinTrWrapper(pointr=pointr, gafte=config['gafte'])
+    model = PoinTrWrapper(pointr=pointr, gafet=config['gafet'])
     model_info(model)
     # # Torch Info: pip install torchinfo --> commit new docker --> docker commit <container id> pointr-ga:configured
     # if config['debug']: 
@@ -131,6 +156,34 @@ def main():
     #     input_shape = train_dataset[42][0].shape
     #     summary(model, input_size=(config['batch_size'], *input_shape))
 
+    if config['resume'] and config['train']:
+        try:
+            resume_step = []
+            for file in os.listdir(os.path.join(save_dir, 'training')):
+                if file != 'final': resume_step.append(int(file))
+            resume_step = max(resume_step)
+            config['resume_step'] = int(resume_step)
+            
+            # Load model parameters
+            resume_checkpoint_file = f"{save_dir}/training/{resume_step}/checkpoint.pt"
+            print(f"Loading model from {resume_checkpoint_file}")
+            resume_checkpoint = torch.load(resume_checkpoint_file, weights_only=True)
+            model.load_state_dict(resume_checkpoint['model'], strict=False) # RUN YOU CLEVER BOY AND REMEMBER
+            model = model.to(device)
+            print("Loading optimizer...")
+            selected_optimizer = AdamW(pointr.parameters())
+            selected_optimizer.load_state_dict(resume_checkpoint['optimizer'])
+
+        except:
+            print(f"\nImpossible to resume training from: {save_dir}")
+            print(f"Restart training")
+            config['resume'] = False
+            config['resume_step'] = 1_000_000_000
+            pass
+    else:
+        config['resume_step'] = 1_000_000_000
+
+            
     # Training configuration
     model_parameters = model.get_model_parameters()
     trainer_parameters = {
@@ -139,32 +192,10 @@ def main():
                         config['optimizer'], 
                         availabel_optimizers,
                         {"params": model_parameters}
-                    ) if not config['load_optimizer'] else pointr_optimizer,
+                    ) if not selected_optimizer else selected_optimizer,
         'scheduler': None,
         'device': device,
     }
-
-    # Set up saving directory
-    save_dir = os.path.join(
-        BASE_DIR,
-        config['save_path'], 
-        config['pointr_config'],
-        "mvformer" if config['gafte'] else "",
-        "fine-tuning" if config['pretrained'] else "full"
-    )
-    run_counter = 0
-    if not config['debug']: os.makedirs(save_dir, exist_ok=True)
-    for file in os.listdir(save_dir):
-        if run_name.split('_') == file.split('_')[:-1]: 
-            run_counter += 1
-    if config['overwrite_run'] and run_counter >= 1: 
-        run_counter -= 1
-        # print(run_counter)
-        # exit()
-    run_name += "_" + str(run_counter)
-    save_dir = os.path.join(save_dir, run_name)
-    logger.info(f"\nSaving checkpoints in: {save_dir}")
-    logger.info(f"\nSaving losses in: {save_dir}")
 
     # Dump file
     if config['dump_dir']:
@@ -195,7 +226,17 @@ def main():
     # Test
     if config['test']:
         print("Testing")
-        checkpoint_file = f"{save_dir}/training/final/checkpoint.pt"
+        final = []
+        try:
+            for file in os.listdir(os.path.join(save_dir, 'training')):
+                if file != 'final': final.append(int(file))
+            final = max(final)
+        except Exception as error:
+            print(f"Impossible to test without a valid checkpoint --> {error}")
+
+        print(f"Loading verasion: {save_dir}/training/{final}/checkpoint.pt")
+        logger.info(f"Loading verasion: {save_dir}/training/{final}/checkpoint.pt")
+        checkpoint_file = f"{save_dir}/training/{final}/checkpoint.pt"
         checkpoint_file = os.path.join(BASE_DIR, '..', checkpoint_file)
         test_model = deepcopy(model)
 
@@ -205,21 +246,19 @@ def main():
 
         if config['dump_dir'] and config['train']:
             print("Checking for difference between saved weights and loaded weights!")
-            print(dump_dir)
             test_dump_file = os.path.join(dump_dir, "test_dump.txt")
             dump_all_modules_parameters(test_model, test_dump_file)
             difference = os.system(f"diff {test_dump_file} {train_dump_file}") 
             if difference > 0: 
                 print(difference)
                 raise Exception(f"Error in loading checpoint form {checkpoint_file}")       
-            print("No difference found!")         
+            print(f"from {dump_dir} --> No difference found!")         
 
         trainer.test(
             model=test_model,
             dataloader=test_dataloader,
             save_path=save_dir
         )
-
 
 if __name__ == "__main__":
     main()

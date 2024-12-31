@@ -12,21 +12,5 @@
 [X] Split trainer and main
 [X] Demo configuration
 [X] Load PoinTr pretrained and not 
-[ ] Select model to test
-
-Experiments:
-
-[X] PoinTr zero shot (pretrained)
-
-- Training (10 epochs)
-[ ] Train PoinTr with CD coarse + CD fine (10 ephocs)
-[ ] Train PoinTr with MVD coarse + CD fine (10 ephocs)
-
-- Fine Tuning (1 epoch)
-[X] Fine tune PoinTr with CD coarse + CD fine 
-[X] Fine tune PoinTr with CD coarse 
-[X] Fine tune PoinTr with CD fine
-[ ] Fine tune PoinTr with MVD fine
-
-- GA Feture Extractor
-[ ] Pointr zero shot plus Foldingnet with MVFormer --> compare with PoinTr ZS
+[X] Select model to test
+[ ] Resume long training

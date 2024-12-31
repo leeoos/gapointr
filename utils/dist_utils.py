@@ -4,7 +4,7 @@ import torch
 import torch.multiprocessing as mp
 from torch import distributed as dist
 
-
+from pointnet2_pytorch.pointnet2_ops_lib.pointnet2_ops import pointnet2_utils
 
 def init_dist(launcher, backend='nccl', **kwargs):
     if mp.get_start_method(allow_none=True) is None:
@@ -52,3 +52,9 @@ def gather_tensor(tensor, args):
     torch.distributed.all_gather(output_tensors, tensor)
     concat = torch.cat(output_tensors, dim=0)
     return concat
+
+
+def fps(pc, num):
+    fps_idx = pointnet2_utils.furthest_point_sample(pc, num) 
+    sub_pc = pointnet2_utils.gather_operation(pc.transpose(1, 2).contiguous(), fps_idx).transpose(1,2).contiguous()
+    return sub_pc
