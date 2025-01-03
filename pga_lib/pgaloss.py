@@ -147,7 +147,7 @@ class PGALoss(nn.Module):
 
 
 if __name__ == "__main__":
-    loss_fn = PGALoss(lambda_rot=1.0, lambda_ref=1.0, lambda_align=1.0, lambda_geo=1.0)
+    loss_fn = PGALoss()
 
     batch_size = 32
     num_points = 2048

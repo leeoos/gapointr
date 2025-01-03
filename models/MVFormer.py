@@ -163,7 +163,7 @@ class SelfAttentionGA(nn.Module):
         super(SelfAttentionGA, self).__init__()
 
         self.algebra = algebra
-        self.v_proj = nn.Linear(2**algebra.dim, embed_dim) #112)
+        self.v_proj = nn.Linear(2**algebra.dim, 120) #embed_dim) #112)
         self.ga_attention = GeometricProductAttention(algebra, embed_dim, hidden_dim, seq_lenght)
 
     def forward(self, x):
@@ -192,17 +192,24 @@ class TransformerEncoderLayerGA(nn.Module):
         self.self_attn = SelfAttentionGA(algebra, embed_dim, hidden_dim, seq_lenght)
 
         self.norm1 = nn.LayerNorm(embed_dim)
+
         # feed forward network
-        self.fc_in = nn.Linear(embed_dim, hidden_dim)
+        # self.fc_in = nn.Linear(embed_dim, hidden_dim)
+        # self.activation = nn.ReLU()
+        # self.fc_out = nn.Linear(hidden_dim, embed_dim)
+        # self.norm2 = nn.LayerNorm(embed_dim)
+
+        self.fc_in = nn.Linear(128, hidden_dim)
         self.activation = nn.ReLU()
-        self.fc_out = nn.Linear(hidden_dim, embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
+        self.fc_out = nn.Linear(hidden_dim, 128)
+        self.norm2 = nn.LayerNorm(128)
 
     def forward(self, x):
 
         # self attention and residual connection
         attn_out = self.self_attn(self.norm1(x))
-        x = x + attn_out
+        # x = x + attn_out
+        x = torch.cat([x, attn_out], dim=-1)
 
         # feed-forward
         ff_out = self.fc_in(x)
@@ -217,20 +224,20 @@ class TransformerEncoderLayerGA(nn.Module):
         return x
 
 
-# class PositionalEncoding(torch.nn.Module):
-#     def __init__(self, d_model, max_len=5000):
-#         super().__init__()
+class PositionalEncoding(torch.nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super().__init__()
 
-#         # create a long enough position tensor
-#         position = torch.arange(max_len).unsqueeze(1)
-#         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-#         pe = torch.zeros(max_len, d_model)
-#         pe[:, 0::2] = torch.sin(position * div_term)
-#         pe[:, 1::2] = torch.cos(position * div_term[:pe[:, 1::2].shape[1]])
-#         self.register_buffer('pe', pe.unsqueeze(0))
+        # create a long enough position tensor
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term[:pe[:, 1::2].shape[1]])
+        self.register_buffer('pe', pe.unsqueeze(0))
 
-#     def forward(self, x):
-#         return x + self.pe[:, :x.size(1)]
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)]
 
 
 class TransformerEncoderGA(nn.Module):
@@ -244,18 +251,29 @@ class TransformerEncoderGA(nn.Module):
             TransformerEncoderLayerGA(self.algebra, embed_dim, hidden_dim, seq_lenght) 
             for _ in range(num_layers)
         ])
-        # self.pos_encoder = PositionalEncoding(embed_dim)
+        self.pos_encoder = PositionalEncoding(embed_dim)
 
     def forward(self, x):
         # print(x.shape)
         # exit()
         x = self.algebra.embed_grade(x, 1) # geometric albebra embedding
-        # x = self.pos_encoder(x)
+        x = self.pos_encoder(x)
+        # print(x.shape)
+        # exit()
 
         # Encoder layers
-        for layer in self.layers:
-            x = layer(x)
+        # for layer in self.layers:
+        #     x = layer(x)
+        #     print(x.shape)
+        #     exit()
+        for i in range(len(self.layers)):
+            x = self.layers[i](x)
+            if i < (len(self.layers) -1):
+                x = x[:, :, -8:]
+            # print(x.shape)
 
+        # print(x.shape)
+        # exit()
         return x
     
 

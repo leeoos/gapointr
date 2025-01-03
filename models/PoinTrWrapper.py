@@ -85,7 +85,14 @@ class PoinTrWrapper(nn.Module):
                 num_layers=2, 
                 seq_lenght=224,
             )
-            self.reduce_map = nn.Linear(384 + 1035, 384)
+            self.reduce_map = nn.Linear(384 + 1027 + 8 + 120, 384)
+            self.increase_dim = nn.Sequential(
+                nn.Conv1d(392, 1024, 1),
+                nn.BatchNorm1d(1024),
+                nn.LeakyReLU(negative_slope=0.2),
+                nn.Conv1d(1024, 1024, 1)
+            )
+            self.foldingnet = Fold(self.pointr.trans_dim, step = self.pointr.fold_step, hidden_dim = 256)
             # self.reduce_map = nn.Linear(8, 3)
 
             # blade = blade_operator().to('cuda')
@@ -141,8 +148,11 @@ class PoinTrWrapper(nn.Module):
             q, coarse_point_cloud = self.pointr.base_model(input) # B M C and B M 3
             B, M , C = q.shape
 
+            # print(f"shape of : {q.shape}")
+            
             global_feature = self.pointr.increase_dim(q.transpose(1,2)).transpose(1,2) # B M 1024
             global_feature = torch.max(global_feature, dim=1)[0] # B 1024
+            # print(f"old global: {global_feature.shape}")
 
             # output_mv = self.gatr(coarse_point_cloud) #[:,:, 1:4] # extract vector part
             # pooled_mv = output_mv.mean(dim=1)  # [16, 256, 16]
@@ -152,7 +162,16 @@ class PoinTrWrapper(nn.Module):
             
             # ga_features = self.reduce_map(self.mvformer(coarse_point_cloud)) #[:,:, 1:4] # extract vector part
             ga_features = self.mvformer(coarse_point_cloud) #[:,:, 1:4] # extract vector part
-
+            # print(f"ga features shape {ga_features.shape}")
+            features_combination = torch.cat([
+                q,
+                ga_features
+            ], dim=-1)
+            # print(f"feature combo {features_combination.shape}")
+            # global_feature = self.increase_dim(features_combination.transpose(1,2)).transpose(1,2) # B M 1024
+            # global_feature = torch.max(global_feature, dim=1)[0] # B 1024
+            # print(f"new global: {global_feature.shape}")
+            # exit()
             # print(ga_features.shape)
             # print(global_feature.unsqueeze(-2).expand(-1, M, -1).shape)
             # print(q.shape)
@@ -169,8 +188,16 @@ class PoinTrWrapper(nn.Module):
                 ga_features
             ], dim=-1)  # B M 1027 + C
             
+            
+            # rebuild_feature = torch.cat([
+            #     global_feature.unsqueeze(-2).expand(-1, M, -1),
+            #     q,
+            #     coarse_point_cloud,
+            # ], dim=-1)  # B M 1027 + C
+            
+
             rebuild_feature = self.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
-            relative_xyz = self.pointr.foldingnet(rebuild_feature).reshape(B, M, 3, -1)    # B M 3 S
+            relative_xyz = self.foldingnet(rebuild_feature).reshape(B, M, 3, -1)    # B M 3 S
             rebuild_points = (relative_xyz + coarse_point_cloud.unsqueeze(-1)).transpose(2,3).reshape(B, -1, 3)  # B N 3
 
             # cat the input

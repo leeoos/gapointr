@@ -1,12 +1,12 @@
 ### PoinTr
 pointr_config: PCN_models
-pretrained: false
+pretrained: true
 load_optimizer: false
 
 ### GAPoinTr
 version: ''
 load_ckp: true
-gafet: true
+gafet: false
 
 ### Dataset
 train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
@@ -15,23 +15,23 @@ test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
 ### Training parameters
 batch_size: 32
 accumulation_step : 2
-epochs: 10
+epochs: 5
 resume: false
 optimizer: {
   type: AdamW,
   kwargs: {
   lr : 0.00005, 
-  weight_decay : 0.00005
+  weight_decay : 0.0005
 }}
 test_batch: 32
 
 ### Run parameters
-run_name: mvformer-cdc-cdf
+run_name: bar-cdc-cdf
 train: true
 test: true
 debug: false
 resume: false
-overwrite_run: false
+overwrite_run: true
 progressive_saves: false
 save_step: 1000
 save_path: saves/

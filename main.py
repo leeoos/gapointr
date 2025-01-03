@@ -244,6 +244,7 @@ def main():
             checkpoint = torch.load(checkpoint_file, weights_only=True)
             test_model.load_state_dict(checkpoint['model'], strict=True)
 
+
         if config['dump_dir'] and config['train']:
             print("Checking for difference between saved weights and loaded weights!")
             test_dump_file = os.path.join(dump_dir, "test_dump.txt")
