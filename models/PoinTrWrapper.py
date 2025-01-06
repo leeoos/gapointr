@@ -20,6 +20,7 @@ from pga_lib.pgaloss import PGALoss
 
 # Feature extraction
 from .MVFormer import TransformerEncoderGA
+from .NewMVFormer import MVFormer
 from models.GATR import GATrToFoldingNetAdapter
 from pga_lib.pga import blade_operator
 
@@ -77,15 +78,27 @@ class PoinTrWrapper(nn.Module):
 
         # Geometric algebra feature extractor
         self.gafet = gafet
+        if self.gafet not in ['head', 'backbone', 'fold']: 
+            print(f"Invalid Geometric Algebra version: {self.gafet}\t using standard PoinTr")
+
         if gafet:
-            self.mvformer = TransformerEncoderGA(
-                algebra_dim=3,  #
-                embed_dim=8,    # fixed for 3D clifford algebra 
-                hidden_dim=128, 
-                num_layers=2, 
-                seq_lenght=224,
+            # self.mvformer = TransformerEncoderGA(
+            #     algebra_dim=3,  #
+            #     embed_dim=8,    # fixed for 3D clifford algebra 
+            #     hidden_dim=128, 
+            #     num_layers=2, 
+            #     seq_lenght=224,
+            # )
+            self.mvformer = MVFormer(
+                algebra_dim=3,  # For 3D inputs
+                embed_dim=8,  # Embedding size
+                hidden_dim=64,  # Hidden dimension
+                num_encoder_layers=4 if self.gafet == 'backbone' else 2,  # Encoder depth
+                num_decoder_layers=0,  # Decoder depth
+                seq_length=128 if self.gafet == 'backbone' else 224,  # Number of points
             )
-            self.reduce_map = nn.Linear(384 + 1027 + 8 + 120, 384)
+            self.project_back = nn.Linear(8, 3)
+            self.reduce_map = nn.Linear(384 + 1027 + 8, 384)
             self.increase_dim = nn.Sequential(
                 nn.Conv1d(392, 1024, 1),
                 nn.BatchNorm1d(1024),
@@ -93,6 +106,15 @@ class PoinTrWrapper(nn.Module):
                 nn.Conv1d(1024, 1024, 1)
             )
             self.foldingnet = Fold(self.pointr.trans_dim, step = self.pointr.fold_step, hidden_dim = 256)
+
+            if self.gafet == 'head': print(f'Using head')
+            if self.gafet == 'backbone':
+                print(f'Using backbone')
+                self.pointr.base_model.mvformer = self.mvformer
+                self.pointr.base_model.project_back = self.project_back
+            if self.gafet == 'fold': print(f'Using fold')
+
+
             # self.reduce_map = nn.Linear(8, 3)
 
             # blade = blade_operator().to('cuda')
@@ -134,16 +156,29 @@ class PoinTrWrapper(nn.Module):
         # self.train_loss = self.mvd_reg_loss #lambda x,y: self.chamfer_distance_l1(x[1], y) + self.multivector_distance(x[0], y)
         # self.train_loss = self.pointr_loss
         # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.pga(x[1], y)
-        # self.train_loss = lambda x,y: 0.2*self.chamfer_distance_l1(x[1], y) + 0.8*self.pga(x[1], y)
+        self.train_loss = lambda x,y: 0.2*self.chamfer_distance_l1(x[1], y) + 0.8*self.pga(x[1], y)
         # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) + 0.2*self.pga(x[1], y)
-        self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) 
+        # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) 
 
     
     def pga_loss_explicit(self, input, target):
         return self.pga(input, target)
 
     def forward(self, input):
-        if self.gafet:
+
+        # Select GAPoinTr version
+        if self.gafet == 'head':
+            coarse, fine = self.pointr(input)
+            new_fine = self.fps(fine, 224)
+            new_fine = self.project_back(self.mvformer(new_fine))
+            new_fine = torch.cat([fine, new_fine, input],dim=1).contiguous()
+            return coarse, new_fine
+        
+        elif self.gafet == 'backbone':
+            coarse, fine = self.pointr(input)
+            return coarse, fine
+
+        elif self.gafet == 'fold':
             # replicate pointr inference
             q, coarse_point_cloud = self.pointr.base_model(input) # B M C and B M 3
             B, M , C = q.shape
@@ -163,10 +198,10 @@ class PoinTrWrapper(nn.Module):
             # ga_features = self.reduce_map(self.mvformer(coarse_point_cloud)) #[:,:, 1:4] # extract vector part
             ga_features = self.mvformer(coarse_point_cloud) #[:,:, 1:4] # extract vector part
             # print(f"ga features shape {ga_features.shape}")
-            features_combination = torch.cat([
-                q,
-                ga_features
-            ], dim=-1)
+            # features_combination = torch.cat([
+            #     q,
+            #     ga_features
+            # ], dim=-1)
             # print(f"feature combo {features_combination.shape}")
             # global_feature = self.increase_dim(features_combination.transpose(1,2)).transpose(1,2) # B M 1024
             # global_feature = torch.max(global_feature, dim=1)[0] # B 1024

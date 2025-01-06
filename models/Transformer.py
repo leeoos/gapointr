@@ -284,6 +284,10 @@ class PCTransformer(nn.Module):
         
         super().__init__()
 
+        ### MVFormer
+        self.mvformer = None
+        self.project_back = None
+
 
         self.num_features = self.embed_dim = embed_dim
         
@@ -403,6 +407,13 @@ class PCTransformer(nn.Module):
         # build point proxy
         bs = inpc.size(0)
         coor, f = self.grouper(inpc.transpose(1,2).contiguous()) 
+
+        ## GA backbone
+        if self.mvformer and self.project_back:
+            # print(coor.transpose(1,2).shape)
+            coor = self.project_back(self.mvformer(coor.transpose(1,2).contiguous())).transpose(1,2)
+            # print(coor.shape)
+            # exit()
         
 
         knn_index = get_knn_index(coor)

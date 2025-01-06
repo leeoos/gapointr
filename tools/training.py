@@ -157,6 +157,7 @@ class Trainer():
                         # Flush
                         if step > 0 and step % flush_step == 0:
                             # Flush
+                            bbar.set_postfix(flush="flush")
                             gc.collect()
                             torch.cuda.empty_cache()
                             gc.collect()
@@ -213,7 +214,7 @@ class Trainer():
         print(f"Test Loss Function: {test_loss_signature}")
 
         evaluation_results = {}
-        results_file_name = "results.json" if self.pretrained else "full_results.json"
+        results_file_name = "experiments.json" if self.pretrained else "full_results.json"
         results_file = os.path.join(BASE_DIR, "..", f"results/metrics/{results_file_name}")
         os.makedirs(os.path.dirname(results_file), exist_ok=True)
         

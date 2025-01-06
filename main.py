@@ -96,10 +96,11 @@ def main():
         BASE_DIR,
         config['save_path'], 
         config['pointr_config'],
-        "fine-tuning" if config['pretrained'] else "full"
+        "experiments" if config['pretrained'] else "full"
     )
     run_counter = 0
     if not config['debug']: os.makedirs(save_dir, exist_ok=True)
+    if config['gafet']: run_name += "-" + config['gafet']
     for file in os.listdir(save_dir):
         if run_name.split('_') == file.split('_')[:-1]: 
             run_counter += 1
@@ -148,6 +149,20 @@ def main():
 
     print(f"\nBuilding Custom model: {run_name}")
     model = PoinTrWrapper(pointr=pointr, gafet=config['gafet'])
+
+    # Load a previous version of GAPoinTr
+    if config['load_ckp']: #and os.path.isfile(config['ckp_file']):
+        try:
+            ga_checkpoint_file = config['ckp_file']
+            ga_checkpoint_file = os.path.join(BASE_DIR, '..', ga_checkpoint_file)
+            checkpoint = torch.load(ga_checkpoint_file, weights_only=True)
+            print(f"Loading a previous version of GAPoinTr from: {config['ckp_file']}")
+            logger.info(f"Loading a previous version of GAPoinTr from: {config['ckp_file']}")
+            model.load_state_dict(checkpoint['model'], strict=True)
+        except:
+            print(f"Invalid checkpoint path: {ga_checkpoint_file}")
+            pass
+
     model_info(model)
     # # Torch Info: pip install torchinfo --> commit new docker --> docker commit <container id> pointr-ga:configured
     # if config['debug']: 
@@ -240,7 +255,7 @@ def main():
         checkpoint_file = os.path.join(BASE_DIR, '..', checkpoint_file)
         test_model = deepcopy(model)
 
-        if not config['debug'] and config['load_ckp']:
+        if not config['debug']: #and config['load_ckp']:
             checkpoint = torch.load(checkpoint_file, weights_only=True)
             test_model.load_state_dict(checkpoint['model'], strict=True)
 

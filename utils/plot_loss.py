@@ -5,8 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SAVE_DIR = "./" #os.path.join(BASE_DIR, "../results/metrics/")
-# os.makedirs(SAVE_DIR, exist_ok=True)
+SAVE_DIR = os.path.join(BASE_DIR, "../results/images/")
+os.makedirs(SAVE_DIR, exist_ok=True)
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -56,7 +56,7 @@ def main():
 
         # Plot the new data
         plt.figure(figsize=(12, 6))
-        plt.plot(step_indices_new, losses, label=label, marker='o', markersize=2, linestyle='-')
+        plt.plot(step_indices_new, losses, label=label, marker='o', markersize=2, linestyle='-', color='red')
 
         plt.title(title)
         plt.xlabel(x_name)
