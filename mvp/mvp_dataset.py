@@ -20,6 +20,11 @@ class MVPDataset(Dataset):
         self.dataset = h5_dataset
         self.mv = mv # number of multiview instances of partial pcd for each complete pcd
 
+        # print(len(self.dataset['complete_pcds']))
+        # print(len(self.dataset['incomplete_pcds']))
+        # print(len(self.dataset['labels']))
+        # exit()
+
         if logger:
             logger.info(f"len of complete pcd: {len(self.dataset['complete_pcds'])}")
             logger.info(f"len of incomplete pcd: {len(self.dataset['incomplete_pcds'])}")
@@ -63,6 +68,10 @@ class MVPDataset(Dataset):
                 'callback': 'ToTensor',
                 'objects': ['partial', 'gt']
             }])
+        
+    def __get_class__(self, index):
+        # target_index = math.floor(index / self.mv)
+        return self.dataset['labels'][index]
     
     def __getitem__(self, index) -> Any:
 

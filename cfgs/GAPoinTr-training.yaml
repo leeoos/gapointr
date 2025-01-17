@@ -6,8 +6,8 @@ load_optimizer: false
 ### GAPoinTr
 version: ''
 load_ckp: true
-ckp_file: /PoinTr/saves/PCN_models/experiments/gapointr-cdc-cdf-fold_0/training/19500/checkpoint.pt
-gafet: fold
+ckp_file: /PoinTr/saves/PCN_models/experiments/gapointr-cdc-cdf-backbone_1/training/19500/checkpoint.pt
+gafet: head
 
 
 ### Dataset
@@ -15,7 +15,7 @@ train_dataset: 'mvp/datasets/MVP_Train_CP.h5'
 test_dataset: 'mvp/datasets/MVP_Test_CP.h5'
 
 ### Training parameters
-batch_size: 16
+batch_size: 32
 accumulation_step : 4
 epochs: 1
 resume: false
@@ -28,7 +28,7 @@ optimizer: {
 test_batch: 32
 
 ### Run parameters
-run_name: gapointr-cdf-pga
+run_name: ga_pga_head
 train: true
 test: true
 debug: false
@@ -40,6 +40,11 @@ save_path: saves/
 dump_dir: debug/
 
 ### Demo parameters
-ft_version: pointr-cdc-cdf_0
-step: "final"
-version_number: 
+ga_version: /PoinTr/saves/PCN_models/experiments/gapointr-cdc-cdf-head_0/training/19500/checkpoint.pt
+# ga_version: /PoinTr/saves/PCN_models/experiments/gapointr-cdf-pga-head_0/training/39000/checkpoint.pt
+# ga_version: /PoinTr/saves/PCN_models/experiments/gapointr-cdf-pga-head_0/training/39000/checkpoint.pt
+# ga_version: /PoinTr/saves/PCN_models/experiments/pointr-cdc-cdf_0/training/19500/checkpoint.pt # god mode
+ft_version: 
+step: 
+version_number: 0
+cherry_pick: true

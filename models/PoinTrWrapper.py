@@ -156,9 +156,9 @@ class PoinTrWrapper(nn.Module):
         # self.train_loss = self.mvd_reg_loss #lambda x,y: self.chamfer_distance_l1(x[1], y) + self.multivector_distance(x[0], y)
         # self.train_loss = self.pointr_loss
         # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.pga(x[1], y)
-        self.train_loss = lambda x,y: 0.2*self.chamfer_distance_l1(x[1], y) + 0.8*self.pga(x[1], y)
+        # self.train_loss = lambda x,y: 0.2*self.chamfer_distance_l1(x[1], y) + 0.8*self.pga(x[1], y)
         # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) + 0.2*self.pga(x[1], y)
-        # self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) 
+        self.train_loss = lambda x,y: self.chamfer_distance_l1(x[0], y) + self.chamfer_distance_l1(x[1], y) 
 
     
     def pga_loss_explicit(self, input, target):
@@ -196,7 +196,7 @@ class PoinTrWrapper(nn.Module):
             # ga_features = global_feature + reduced_mv  # [16, 1024]
             
             # ga_features = self.reduce_map(self.mvformer(coarse_point_cloud)) #[:,:, 1:4] # extract vector part
-            ga_features = self.mvformer(coarse_point_cloud) #[:,:, 1:4] # extract vector part
+            ga_features = self.project_back(self.mvformer(coarse_point_cloud)) #[:,:, 1:4] # extract vector part
             # print(f"ga features shape {ga_features.shape}")
             # features_combination = torch.cat([
             #     q,
@@ -219,7 +219,7 @@ class PoinTrWrapper(nn.Module):
             rebuild_feature = torch.cat([
                 global_feature.unsqueeze(-2).expand(-1, M, -1),
                 q,
-                coarse_point_cloud,
+                # coarse_point_cloud,
                 ga_features
             ], dim=-1)  # B M 1027 + C
             
@@ -231,8 +231,8 @@ class PoinTrWrapper(nn.Module):
             # ], dim=-1)  # B M 1027 + C
             
 
-            rebuild_feature = self.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
-            relative_xyz = self.foldingnet(rebuild_feature).reshape(B, M, 3, -1)    # B M 3 S
+            rebuild_feature = self.pointr.reduce_map(rebuild_feature.reshape(B*M, -1)) # BM C
+            relative_xyz = self.pointr.foldingnet(rebuild_feature).reshape(B, M, 3, -1)    # B M 3 S
             rebuild_points = (relative_xyz + coarse_point_cloud.unsqueeze(-1)).transpose(2,3).reshape(B, -1, 3)  # B N 3
 
             # cat the input

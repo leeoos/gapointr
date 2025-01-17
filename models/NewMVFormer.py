@@ -127,8 +127,11 @@ class TransformerEncoderGA(nn.Module):
         ])
         self.pos_encoder = PositionalEncoding(embed_dim)
 
+        self.algebra_embedding = nn.Linear(3, 2**algebra_dim)
+
     def forward(self, x):
-        x = self.algebra.embed_grade(x, 1)  # Geometric Algebra embedding
+        # x = self.algebra.embed_grade(x, 1)  # Geometric Algebra embedding
+        x = self.algebra_embedding(x)  # Geometric Algebra embedding
         x = self.pos_encoder(x)
         for i, layer in enumerate(self.layers):
             x = layer(x)

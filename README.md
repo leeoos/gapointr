@@ -1,26 +1,23 @@
 
 
-# Quick Notes
+# Point Cloud Completion with Geometry-Aware Transformers
 
-pointnet2_pytorch --> setup.py --> os.environ["TORCH_CUDA_ARCH_LIST"] = "5.0;6.0;6.1;6.2;7.0;7.5;8.0;8.6"
+This repository contains the implementation of the paper "PoinTr: Diverse Point Cloud Completion with Geometry-Aware Transformers" by Xumin Yu, Yongming Rao, Ziyi Wang, Zuyan Liu, Jiwen Lu, and Jie Zhou.
 
-git ls-tree -r -l HEAD | sort -k 4 -n -r | head -n 20
+## Table of Contents
 
-# For ever
-- do not touch extensions
-- Do not touch utils 
-- Do not touch tools
+- [Installation](#installation)
+- [Usage](#usage)
+- [Dataset Preparation](#dataset-preparation)
+- [Training](#training)
+- [Testing](#testing)
+- [Results](#results)
+- [License](#license)
+- [Citation](#citation)
 
+## Installation
 
-# For later 
-- delete scripts
+To install the necessary dependencies, run the following script:
 
-
-```
-@inproceedings{yu2021pointr,
-  title={PoinTr: Diverse Point Cloud Completion with Geometry-Aware Transformers},
-  author={Yu, Xumin and Rao, Yongming and Wang, Ziyi and Liu, Zuyan and Lu, Jiwen and Zhou, Jie},
-  booktitle={ICCV},
-  year={2021}
-}
-```
+```sh
+source install.sh
