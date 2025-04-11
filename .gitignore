@@ -160,7 +160,7 @@ mvp/datasets
 whl/
 ckpts/
 data/
-pointnet2_pytorch/
+#pointnet2_pytorch/
 logs/
 saves/
 results/

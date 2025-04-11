@@ -12,19 +12,19 @@ python setup.py install
 
 # EMD
 cd $ROOT/extensions/emd
-python setup.py install 
+python setup.py install
 
 # Cubic Feature Sampling
 cd $ROOT/extensions/cubic_feature_sampling
-python setup.py install 
+python setup.py install
 
 # Gridding & Gridding Reverse
 cd $ROOT/extensions/gridding
-python setup.py install 
+python setup.py install
 
 # Gridding Loss
 cd $ROOT/extensions/gridding_loss
-python setup.py install 
+python setup.py install
 
 cd $ROOT/pointnet2_pytorch
 pip install ./pointnet2_ops_lib

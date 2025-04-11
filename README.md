@@ -16,8 +16,22 @@ This repository contains the implementation of the paper "PoinTr: Diverse Point 
 - [Citation](#citation)
 
 ## Installation
+The first step is to build the docker image. You can do this by running the following command in the root directory of the repository:
 
-To install the necessary dependencies, run the following script:
+```sh
+bash gapointr/docker/build.sh
+```
+Then run the container with the following command:
+
+```sh
+bash gapointr/docker/run.sh
+```
+To install the necessary dependencies inside the container, run the following script:
 
 ```sh
 source install.sh
+```
+
+After this export the container:
+```sh
+docker commit <container-id/nome> pointr-ga:configured
