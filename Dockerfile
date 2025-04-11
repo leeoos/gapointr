@@ -1,5 +1,5 @@
 # Set the base CUDA image
-FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04
 
 # Install Python, Git, and other dependencies
 RUN apt-get update && apt-get install -y \
@@ -19,7 +19,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 RUN pip3 install --upgrade pip
 RUN pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
-# Install PyTorch Geometric and dependencies for CUDA 
+# Install PyTorch Geometric and dependencies for CUDA
 RUN pip3 install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric
 RUN pip3 install torch-cluster -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
 # RUN pip3 install torch_geometric
@@ -30,7 +30,7 @@ RUN pip3 install chamferdist
 WORKDIR /PoinTr
 
 # Copy your local repository to the container
-COPY . /PoinTr
+COPY . /PoinTr`
 
 # Install dependencies from requirements.txt
 RUN pip install -r /PoinTr/requirements.txt --timeout 10000
@@ -44,7 +44,7 @@ WORKDIR /PoinTr/
 
 ### OLD ###
 # # Set the base CUDA image
-# FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 
+# FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
 
 # # Install Python, Git, and other dependencies
 # RUN apt-get update && apt-get install -y \
@@ -80,7 +80,7 @@ WORKDIR /PoinTr/
 # # RUN pip install --upgrade clifford
 # # RUN pip3 install --index-url http://host.docker.internal:8080/simple torch torchvision torchaudio
 
-# # Set CUDA architecture list to match your target GPU 
+# # Set CUDA architecture list to match your target GPU
 # # ENV TORCH_CUDA_ARCH_LIST="7.5"
 
 # # Set the working directory to /PoinTr
