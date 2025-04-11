@@ -1,3 +1,37 @@
+# Custome ignores
+experiments/
+data/ShapeNet55-34/shapenet_pc
+data/ShapeNet55-34/clean*
+data/KITTI/cars
+data/KITTI/bboxes
+data/KITTI/tracklets
+data/PCN/train
+data/PCN/test
+data/PCN/val
+upload*
+KITTI_VIS/
+models/pointrvrc/mm3d_pn2
+data/ShapeNet55-34/projected_partial_noise
+inference_result/
+debug/
+.vscode/
+.local/
+.nv/
+.rustup/
+.legacy/
+scripts/
+whl/
+logs/
+#pointnet2_pytorch/
+#
+# To copy
+mvp/datasets
+ckpts/
+data/
+saves/
+results/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -134,37 +168,7 @@ dmypy.json
 *.pt
 *.npy
 
-experiments/
-data/ShapeNet55-34/shapenet_pc
-data/ShapeNet55-34/clean*
-data/KITTI/cars
-data/KITTI/bboxes
-data/KITTI/tracklets
-data/PCN/train
-data/PCN/test
-data/PCN/val
-upload*
-KITTI_VIS/
-models/pointrvrc/mm3d_pn2
-data/ShapeNet55-34/projected_partial_noise
-inference_result/
-debug/
 
-# Custome ignores
-.vscode/
-.local/
-.nv/
-.rustup/
-scripts/
-mvp/datasets
-whl/
-ckpts/
-data/
-#pointnet2_pytorch/
-logs/
-saves/
-results/
-.legacy/
 
 # Sudo Codium
 CachedProfilesData/
@@ -177,7 +181,6 @@ Trust Tokens-journal
 User/
 languagepacks.json
 machineid
-
 Session Storage/
 CachedData/dc5a551c256719475d2d0959270e3836c9bbb632/chrome/
 blob_storage/
