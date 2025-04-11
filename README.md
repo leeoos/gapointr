@@ -34,4 +34,6 @@ source install.sh
 
 After this export the container:
 ```sh
-docker commit <container-id/nome> pointr-ga:configured
+docker commit $(docker ps -q --filter ancestor=pointr-ga) pointr-ga:configured
+```
+Then decomment line 15 of docker/run.sh
